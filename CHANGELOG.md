@@ -1,3 +1,11 @@
+## [1.0.1](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v1.0.0...v1.0.1) (2026-03-24)
+
+
+### Bug Fixes
+
+* fix release workflow, remove wrong key name for auth ([1ecd55b](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/1ecd55b39cd2829be92267d367148b039b1a6c5e))
+* release workflow artefacts ([feef28d](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/feef28deb85260beb6853b0e8e00d36c2f961ce1))
+
 # 1.0.0 (2026-03-24)
 
 
