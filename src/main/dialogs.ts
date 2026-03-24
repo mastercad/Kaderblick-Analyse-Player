@@ -1,0 +1,127 @@
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { BrowserWindow, dialog } from 'electron'
+import { normalizeImportedPresets } from '../common/filterUtils'
+import type { AppSettingsExport, CsvFileDescriptor, FilterPreset, VideoFileDescriptor } from '../common/types'
+
+const videoExtensions = ['mp4', 'mov', 'mkv', 'avi', 'm4v', 'webm']
+
+const getActiveWindow = (): BrowserWindow | null => {
+  return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
+}
+
+export const pickVideoFile = async (): Promise<VideoFileDescriptor | undefined> => {
+  const result = await dialog.showOpenDialog(getActiveWindow(), {
+    title: 'Video auswahlen',
+    properties: ['openFile'],
+    filters: [
+      {
+        name: 'Video',
+        extensions: videoExtensions
+      },
+      {
+        name: 'Alle Dateien',
+        extensions: ['*']
+      }
+    ]
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return undefined
+  }
+
+  const selectedPath = result.filePaths[0]
+
+  return {
+    path: selectedPath,
+    fileName: path.basename(selectedPath),
+    fileUrl: pathToFileURL(selectedPath).toString()
+  }
+}
+
+export const pickCsvFile = async (): Promise<CsvFileDescriptor | undefined> => {
+  const result = await dialog.showOpenDialog(getActiveWindow(), {
+    title: 'Segmentdatei auswahlen',
+    properties: ['openFile'],
+    filters: [
+      {
+        name: 'CSV',
+        extensions: ['csv']
+      }
+    ]
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return undefined
+  }
+
+  const selectedPath = result.filePaths[0]
+  const content = await fs.readFile(selectedPath, 'utf-8')
+
+  return {
+    path: selectedPath,
+    fileName: path.basename(selectedPath),
+    content
+  }
+}
+
+export const exportPresetsToJson = async (presets: FilterPreset[]): Promise<boolean> => {
+  const result = await dialog.showSaveDialog(getActiveWindow(), {
+    title: 'Presets exportieren',
+    defaultPath: 'filter-presets.json',
+    filters: [
+      {
+        name: 'JSON',
+        extensions: ['json']
+      }
+    ]
+  })
+
+  if (result.canceled || !result.filePath) {
+    return false
+  }
+
+  await fs.writeFile(result.filePath, JSON.stringify(presets, null, 2), 'utf-8')
+  return true
+}
+
+export const importPresetsFromJson = async (): Promise<FilterPreset[]> => {
+  const result = await dialog.showOpenDialog(getActiveWindow(), {
+    title: 'Presets importieren',
+    properties: ['openFile'],
+    filters: [
+      {
+        name: 'JSON',
+        extensions: ['json']
+      }
+    ]
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return []
+  }
+
+  const content = await fs.readFile(result.filePaths[0], 'utf-8')
+  return normalizeImportedPresets(JSON.parse(content))
+}
+
+export const exportAppSettingsToJson = async (settings: AppSettingsExport): Promise<boolean> => {
+  const result = await dialog.showSaveDialog(getActiveWindow(), {
+    title: 'App-Einstellungen exportieren',
+    defaultPath: 'kaderblick-app-einstellungen.json',
+    filters: [
+      {
+        name: 'JSON',
+        extensions: ['json']
+      }
+    ]
+  })
+
+  if (result.canceled || !result.filePath) {
+    return false
+  }
+
+  await fs.writeFile(result.filePath, JSON.stringify(settings, null, 2), 'utf-8')
+  return true
+}

@@ -1,0 +1,101 @@
+name: Release Artefacts
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  build_linux:
+    name: Linux Pakete bauen
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository am Release-Tag auschecken
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Abhaengigkeiten installieren
+        run: npm ci
+
+      - name: Linux Release bauen
+        run: npm run build
+
+      - name: Linux Artefakte hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: |
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+
+  build_windows:
+    name: Windows Pakete bauen
+    runs-on: windows-latest
+
+    steps:
+      - name: Repository am Release-Tag auschecken
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Abhaengigkeiten installieren
+        run: npm ci
+
+      - name: Windows Release bauen
+        run: npm run build
+
+      - name: Windows Artefakte hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: |
+            release/*-setup-*.exe
+            release/*-portable-*.exe
+          if-no-files-found: error
+
+  attach_assets:
+    name: Artefakte ans Release haengen
+    runs-on: ubuntu-latest
+    needs:
+      - build_linux
+      - build_windows
+
+    steps:
+      - name: Linux Artefakte herunterladen
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-release
+          path: dist-artifacts/linux
+
+      - name: Windows Artefakte herunterladen
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: dist-artifacts/windows
+
+      - name: Release-Dateien hochladen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: |
+            dist-artifacts/**/*.AppImage
+            dist-artifacts/**/*.deb
+            dist-artifacts/**/*.exe

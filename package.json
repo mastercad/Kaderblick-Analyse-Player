@@ -1,0 +1,114 @@
+{
+  "name": "kaderblick-analyse-player",
+  "version": "0.1.0",
+  "description": "Desktop player for football video analysis with CSV segments, live filters and team-friendly controls.",
+  "main": "out/main/index.js",
+  "author": {
+    "name": "Andreas Kempe",
+    "email": "andreas.kempe@byte-artist.de",
+    "url": "https://kaderblick.de"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mastercad/kaderblick-analyse-player.git"
+  },
+  "homepage": "https://github.com/mastercad/kaderblick-analyse-player",
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "tsc --noEmit && electron-vite build && electron-builder",
+    "build:dir": "tsc --noEmit && electron-vite build && electron-builder --dir",
+    "preview": "electron-vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "release": "semantic-release",
+    "release:dry-run": "semantic-release --dry-run"
+  },
+  "build": {
+    "appId": "de.fussballverein.video-player",
+    "productName": "Kaderblick Analyse Player",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "executableName": "kaderblick-analyse-player",
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "extraMetadata": {
+      "description": "Kaderblick Analyse Player fuer gemeinsame Videoanalyse im Team"
+    },
+    "icon": "build/icon.png",
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "AudioVideo",
+      "icon": "build/icon.png",
+      "desktop": {
+        "entry": {
+          "Name": "Kaderblick Analyse Player",
+          "Comment": "CSV-basierte Videoanalyse mit Segmentmodus, Filtern und Presets",
+          "StartupWMClass": "Kaderblick Analyse Player"
+        }
+      }
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.ico",
+      "legalTrademarks": "Kaderblick Analyse Player"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Kaderblick Analyse Player",
+      "uninstallDisplayName": "Kaderblick Analyse Player",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "artifactName": "${productName}-${version}-setup-${arch}.${ext}"
+    }
+  },
+  "dependencies": {
+    "papaparse": "^5.5.3",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.1.0",
+    "@commitlint/config-conventional": "^20.0.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^11.0.6",
+    "@semantic-release/npm": "^12.0.2",
+    "@semantic-release/release-notes-generator": "^14.1.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^24.6.1",
+    "@types/papaparse": "^5.3.16",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.0.4",
+    "electron": "^37.4.0",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^4.0.0",
+    "happy-dom": "^18.0.1",
+    "semantic-release": "^24.2.9",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.10",
+    "vitest": "^3.2.4"
+  }
+}
