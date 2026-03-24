@@ -54,4 +54,3 @@ jobs:
     uses: ./.github/workflows/release-artifacts.yml
     with:
       tag: ${{ needs.release.outputs.tag }}
-    secrets: inherit
