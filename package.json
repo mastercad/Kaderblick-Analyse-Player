@@ -10,9 +10,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/mastercad/kaderblick-analyse-player.git"
+    "url": "https://github.com/mastercad/Kaderblick-Analyse-Player.git"
   },
-  "homepage": "https://github.com/mastercad/kaderblick-analyse-player",
+  "homepage": "https://github.com/mastercad/Kaderblick-Analyse-Player",
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
