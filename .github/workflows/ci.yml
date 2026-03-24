@@ -4,11 +4,13 @@ on:
   pull_request:
     branches:
       - main
+  workflow_call:
 
 jobs:
   commit_messages:
     name: Commit-Messages pruefen
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
 
     steps:
       - name: Repository auschecken
