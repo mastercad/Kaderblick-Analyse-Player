@@ -17,7 +17,7 @@
   "type": "module",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "tsc --noEmit && electron-vite build && electron-builder",
+    "build": "tsc --noEmit && electron-vite build && electron-builder --publish never",
     "build:dir": "tsc --noEmit && electron-vite build && electron-builder --dir",
     "preview": "electron-vite preview",
     "test": "vitest run",
@@ -36,20 +36,20 @@
       "package.json"
     ],
     "directories": {
-      "buildResources": "build",
+      "buildResources": "assets",
       "output": "release"
     },
     "extraMetadata": {
       "description": "Kaderblick Analyse Player fuer gemeinsame Videoanalyse im Team"
     },
-    "icon": "build/icon.png",
+    "icon": "assets/icon.png",
     "linux": {
       "target": [
         "AppImage",
         "deb"
       ],
       "category": "AudioVideo",
-      "icon": "build/icon.png",
+      "icon": "assets/icon.png",
       "desktop": {
         "entry": {
           "Name": "Kaderblick Analyse Player",
@@ -63,7 +63,7 @@
         "nsis",
         "portable"
       ],
-      "icon": "build/icon.ico",
+      "icon": "assets/icon.ico",
       "legalTrademarks": "Kaderblick Analyse Player"
     },
     "portable": {
@@ -75,9 +75,9 @@
       "allowToChangeInstallationDirectory": true,
       "shortcutName": "Kaderblick Analyse Player",
       "uninstallDisplayName": "Kaderblick Analyse Player",
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
       "artifactName": "${productName}-${version}-setup-${arch}.${ext}"
     }
   },

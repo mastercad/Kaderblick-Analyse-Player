@@ -95,6 +95,6 @@ Der Build erzeugt Pakete fur Linux und Windows uber `electron-builder`.
 ## Branding und Installer
 
 - Produktname: Kaderblick Analyse Player
-- Build-Ressourcen liegen unter `build/`
+- Build-Ressourcen liegen unter `assets/`
 - Linux nutzt ein Desktop-Icon und einen aussagekraftigen Desktop-Kommentar.
 - Windows nutzt ein eigenes Installer-, Uninstaller- und Programm-Icon sowie einen sprechenden Programmnamen im Installer.
