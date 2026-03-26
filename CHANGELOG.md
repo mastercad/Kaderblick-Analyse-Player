@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v1.0.2...v1.1.0) (2026-03-26)
+
+
+### Features
+
+* reafactor design, make more kaderblick like corporate design ([8c60888](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/8c608880cdcd3b207af2a2228e5aa1410a20a0d4))
+
 ## [1.0.2](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v1.0.1...v1.0.2) (2026-03-24)
 
 
