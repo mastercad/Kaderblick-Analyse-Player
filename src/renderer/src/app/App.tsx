@@ -11,8 +11,25 @@ import { FilterOverlay } from '../features/filters/FilterOverlay'
 import { FilterPresetSaveDialog } from '../features/filters/FilterPresetSaveDialog'
 import { LibraryToolbar } from '../features/library/LibraryToolbar'
 import { VideoWorkspace } from '../features/player/VideoWorkspace'
+import appLogo from '../../../../assets/icon.svg'
 
 const defaultPresetId = builtInFilterPresets[0].id
+const themeStorageKey = 'kaderblick-theme-mode'
+
+type ThemeMode = 'light' | 'dark'
+
+function getInitialTheme(): ThemeMode {
+  if (typeof window === 'undefined') {
+    return 'light'
+  }
+
+  const storedTheme = window.localStorage.getItem(themeStorageKey)
+  if (storedTheme === 'light' || storedTheme === 'dark') {
+    return storedTheme
+  }
+
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
 
 export function App() {
   const [selectedVideo, setSelectedVideo] = useState<VideoFileDescriptor>()
@@ -29,6 +46,7 @@ export function App() {
   const [appInfo, setAppInfo] = useState<AppInfo>(defaultAppInfo)
   const [presetSaveDialogVisible, setPresetSaveDialogVisible] = useState(false)
   const [presetSaveMode, setPresetSaveMode] = useState<'new' | 'save'>('save')
+  const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialTheme)
 
   const presets = [...builtInFilterPresets, ...customPresets]
   const matchedSegments = selectedVideo ? matchSegmentsToVideo(allSegments, selectedVideo.fileName) : []
@@ -61,6 +79,12 @@ export function App() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeMode
+    document.documentElement.style.colorScheme = themeMode
+    window.localStorage.setItem(themeStorageKey, themeMode)
+  }, [themeMode])
 
   const persistCustomPresets = async (nextPresets: FilterPreset[], message?: string): Promise<void> => {
     setCustomPresets(nextPresets)
@@ -233,98 +257,124 @@ export function App() {
     setStatusMessage(success ? 'App-Einstellungen wurden als JSON exportiert.' : 'Export der App-Einstellungen abgebrochen.')
   }
 
+  const toggleThemeMode = (): void => {
+    setThemeMode((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'))
+  }
+
   return (
-    <div className="shell">
+    <div className={`shell ${showStartScreen ? 'shell--start' : 'shell--workspace'}`}>
       <header className="shell__header">
-        <div className="brand-lockup">
-          <div className="brand-mark" aria-hidden="true">
-            <span className="brand-mark__ball" />
-            <span className="brand-mark__play" />
+        <div className="shell__header-inner">
+          <div className="brand-lockup">
+            <div className="brand-mark">
+              <img alt="Kaderblick Logo" className="brand-mark__logo" src={appLogo} />
+              <div className="brand-mark__copy">
+                <span className="brand-mark__word" aria-label="Kaderblick">
+                  <span className="brand-mark__initial">K</span>
+                  <span className="brand-mark__rest">ADERBLICK</span>
+                </span>
+                <span className="brand-mark__player">ANALYSE PLAYER</span>
+              </div>
+            </div>
+            <div className="brand-copy">
+              <p className="shell__eyebrow">Desktop-App</p>
+              <h1>Intuitive Videoanalyse fuer Spielszenen und Segmente</h1>
+              <p className="shell__subline">Klarer Player-Fokus mit Kaderblick Branding, Light- und Dark-Mode sowie direktem Zugriff auf Segmente und Bildfilter.</p>
+            </div>
           </div>
-          <div>
-            <p className="shell__eyebrow">Kaderblick Analyse Player</p>
-            <h1>Gemeinsame Videoanalyse fuer Windows und Linux</h1>
-            <p className="shell__subline">Segmente laden, Bild verbessern und Spielszenen im Team ohne Browser-Gefrickel auswerten.</p>
+
+          <div className="shell__header-side">
+            <div className="button-stack shell__header-actions">
+              <button
+                aria-label={`Zu ${themeMode === 'dark' ? 'Light' : 'Dark'} Mode wechseln`}
+                className="theme-toggle"
+                type="button"
+                onClick={toggleThemeMode}
+              >
+                <span className="theme-toggle__label">Modus</span>
+                <span className="theme-toggle__value">{themeMode === 'dark' ? 'Dark' : 'Light'}</span>
+                <span className={`theme-toggle__indicator theme-toggle__indicator--${themeMode}`} aria-hidden="true" />
+              </button>
+              <button className="button button--header" type="button" onClick={() => setAboutDialogVisible(true)}>
+                Ueber die App
+              </button>
+              <button className="button button--header" type="button" onClick={() => void handleExportAppSettings()}>
+                App-Einstellungen exportieren
+              </button>
+            </div>
+            <p className="shell__status">{statusMessage}</p>
           </div>
-        </div>
-        <div className="shell__header-side">
-          <div className="button-stack shell__header-actions">
-            <button className="button" type="button" onClick={() => setAboutDialogVisible(true)}>
-              Ueber die App
-            </button>
-            <button className="button" type="button" onClick={() => void handleExportAppSettings()}>
-              App-Einstellungen exportieren
-            </button>
-          </div>
-          <p className="shell__status">{statusMessage}</p>
         </div>
       </header>
 
-      <LibraryToolbar
-        selectedVideo={selectedVideo}
-        selectedCsv={selectedCsv}
-        matchedSegmentCount={matchedSegments.length}
-        totalSegmentCount={allSegments.length}
-        onLoadVideo={handleLoadVideo}
-        onLoadCsv={handleLoadCsv}
-      />
+      <div className="shell__content">
+        <LibraryToolbar
+          compact={!showStartScreen}
+          selectedVideo={selectedVideo}
+          selectedCsv={selectedCsv}
+          matchedSegmentCount={matchedSegments.length}
+          totalSegmentCount={allSegments.length}
+          onLoadVideo={handleLoadVideo}
+          onLoadCsv={handleLoadCsv}
+        />
 
-      <main className="layout layout--single">
-        <section className="layout__main layout__main--full-width">
-          {showStartScreen ? (
-            <StartScreen
-              appInfo={appInfo}
-              onLoadVideo={handleLoadVideo}
-              onLoadCsv={handleLoadCsv}
-              onOpenAbout={() => setAboutDialogVisible(true)}
-              onExportAppSettings={handleExportAppSettings}
-            />
-          ) : (
-            <VideoWorkspace
-              selectedVideo={selectedVideo}
-              segments={matchedSegments}
-              filterSettings={filterSettings}
-              filterOverlayVisible={filterOverlayVisible}
-              repeatSingleSegment={repeatSingleSegment}
-              onRepeatSingleSegmentChange={setRepeatSingleSegment}
-              onToggleFilterOverlay={() => setFilterOverlayVisible((visible) => !visible)}
-              overlayDialogs={(
-                <>
-                  <AboutDialog appInfo={appInfo} open={aboutDialogVisible} onClose={() => setAboutDialogVisible(false)} />
-                  <FilterPresetSaveDialog
-                    open={presetSaveDialogVisible}
-                    mode={presetSaveMode}
-                    presetNameDraft={presetNameDraft}
-                    selectedPresetName={selectedPreset.name}
-                    selectedPresetBuiltIn={selectedPreset.builtIn}
-                    onClose={() => setPresetSaveDialogVisible(false)}
-                    onPresetNameDraftChange={setPresetNameDraft}
-                    onSaveAsNew={() => void handleSaveNewPreset()}
-                    onOverwriteCurrent={selectedPreset.builtIn ? undefined : () => void handleOverwritePreset()}
-                  />
-                </>
-              )}
-            >
-              <FilterOverlay
-                visible={filterOverlayVisible}
-                settings={filterSettings}
-                presets={presets}
-                selectedPresetId={selectedPresetId}
-                isPresetDirty={isPresetDirty}
-                selectedPresetBuiltIn={selectedPreset.builtIn}
-                onChangeSetting={handleSettingChange}
-                onReset={handleResetFilters}
-                onSelectPreset={applyPreset}
-                onOpenNewPresetDialog={openNewPresetDialog}
-                onOpenSavePresetDialog={openSavePresetDialog}
-                onDeletePreset={handleDeletePreset}
-                onImportPresets={handleImportPresets}
-                onExportPresets={handleExportPresets}
+        <main className="layout layout--single">
+          <section className="layout__main layout__main--full-width">
+            {showStartScreen ? (
+              <StartScreen
+                appInfo={appInfo}
+                onLoadVideo={handleLoadVideo}
+                onLoadCsv={handleLoadCsv}
+                onOpenAbout={() => setAboutDialogVisible(true)}
+                onExportAppSettings={handleExportAppSettings}
               />
-            </VideoWorkspace>
-          )}
-        </section>
-      </main>
+            ) : (
+              <VideoWorkspace
+                selectedVideo={selectedVideo}
+                segments={matchedSegments}
+                filterSettings={filterSettings}
+                filterOverlayVisible={filterOverlayVisible}
+                repeatSingleSegment={repeatSingleSegment}
+                onRepeatSingleSegmentChange={setRepeatSingleSegment}
+                onToggleFilterOverlay={() => setFilterOverlayVisible((visible) => !visible)}
+                overlayDialogs={(
+                  <>
+                    <AboutDialog appInfo={appInfo} open={aboutDialogVisible} onClose={() => setAboutDialogVisible(false)} />
+                    <FilterPresetSaveDialog
+                      open={presetSaveDialogVisible}
+                      mode={presetSaveMode}
+                      presetNameDraft={presetNameDraft}
+                      selectedPresetName={selectedPreset.name}
+                      selectedPresetBuiltIn={selectedPreset.builtIn}
+                      onClose={() => setPresetSaveDialogVisible(false)}
+                      onPresetNameDraftChange={setPresetNameDraft}
+                      onSaveAsNew={() => void handleSaveNewPreset()}
+                      onOverwriteCurrent={selectedPreset.builtIn ? undefined : () => void handleOverwritePreset()}
+                    />
+                  </>
+                )}
+              >
+                <FilterOverlay
+                  visible={filterOverlayVisible}
+                  settings={filterSettings}
+                  presets={presets}
+                  selectedPresetId={selectedPresetId}
+                  isPresetDirty={isPresetDirty}
+                  selectedPresetBuiltIn={selectedPreset.builtIn}
+                  onChangeSetting={handleSettingChange}
+                  onReset={handleResetFilters}
+                  onSelectPreset={applyPreset}
+                  onOpenNewPresetDialog={openNewPresetDialog}
+                  onOpenSavePresetDialog={openSavePresetDialog}
+                  onDeletePreset={handleDeletePreset}
+                  onImportPresets={handleImportPresets}
+                  onExportPresets={handleExportPresets}
+                />
+              </VideoWorkspace>
+            )}
+          </section>
+        </main>
+      </div>
 
       {showStartScreen ? <AboutDialog appInfo={appInfo} open={aboutDialogVisible} onClose={() => setAboutDialogVisible(false)} /> : null}
     </div>

@@ -324,25 +324,35 @@ export function VideoWorkspace({
           )}
         </div>
 
-        <div className="controls-row">
-          <button className="button button--primary" type="button" onClick={() => void togglePlayPause()} disabled={!selectedVideo}>
-            {isPlaying ? 'Pause' : 'Play'}
-          </button>
-          <button className="button" type="button" onClick={() => void startSegmentPlayback()} disabled={!selectedVideo || segments.length === 0}>
-            Nur Segmente abspielen
-          </button>
-          <button className="button" type="button" onClick={jumpToPreviousSegment} disabled={segments.length === 0}>
-            Voriges Segment
-          </button>
-          <button className="button" type="button" onClick={jumpToNextSegment} disabled={segments.length === 0}>
-            Naechstes Segment
-          </button>
-          <button className="button" type="button" onClick={onToggleFilterOverlay} disabled={!selectedVideo}>
-            Filter {filterOverlayVisible ? 'ausblenden' : 'einblenden'}
-          </button>
-          <button className="button" type="button" onClick={() => void toggleFullscreen()} disabled={!selectedVideo}>
-            {isFullscreen ? 'Vollbild beenden' : 'Vollbild'}
-          </button>
+        <div className="player-controls">
+          <div className="controls-row player-controls__transport">
+            <button className="button button--primary" type="button" onClick={() => void togglePlayPause()} disabled={!selectedVideo}>
+              {isPlaying ? 'Pause' : 'Play'}
+            </button>
+            <button className="button" type="button" onClick={() => void startSegmentPlayback()} disabled={!selectedVideo || segments.length === 0}>
+              Nur Segmente abspielen
+            </button>
+            <button className="button" type="button" onClick={jumpToPreviousSegment} disabled={segments.length === 0}>
+              Voriges Segment
+            </button>
+            <button className="button" type="button" onClick={jumpToNextSegment} disabled={segments.length === 0}>
+              Naechstes Segment
+            </button>
+          </div>
+
+          <div className="controls-row player-controls__utility">
+            <button className="button button--subtle" type="button" onClick={onToggleFilterOverlay} disabled={!selectedVideo}>
+              Filter {filterOverlayVisible ? 'ausblenden' : 'einblenden'}
+            </button>
+            <button className="button button--subtle" type="button" onClick={() => void toggleFullscreen()} disabled={!selectedVideo}>
+              {isFullscreen ? 'Vollbild beenden' : 'Vollbild'}
+            </button>
+          </div>
+        </div>
+
+        <div className="player-assist-row">
+          <span className="player-assist-pill">{segments.length} Segmente verfuegbar</span>
+          <span className="player-assist-pill">Leertaste, Pfeile, N, R, F, F11</span>
         </div>
 
         <label className="toggle-row">

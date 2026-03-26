@@ -1,6 +1,7 @@
 import type { CsvFileDescriptor, VideoFileDescriptor } from '../../../../common/types'
 
 interface LibraryToolbarProps {
+  compact?: boolean
   selectedVideo?: VideoFileDescriptor
   selectedCsv?: CsvFileDescriptor
   matchedSegmentCount: number
@@ -10,6 +11,7 @@ interface LibraryToolbarProps {
 }
 
 export function LibraryToolbar({
+  compact = false,
   selectedVideo,
   selectedCsv,
   matchedSegmentCount,
@@ -18,14 +20,22 @@ export function LibraryToolbar({
   onLoadCsv
 }: LibraryToolbarProps) {
   return (
-    <section className="panel toolbar">
-      <div className="toolbar__actions">
-        <button className="button button--primary" type="button" onClick={() => void onLoadVideo()}>
-          Video laden
-        </button>
-        <button className="button" type="button" onClick={() => void onLoadCsv()}>
-          CSV laden
-        </button>
+    <section className={`panel toolbar ${compact ? 'toolbar--compact' : ''}`}>
+      <div className="toolbar__lead">
+        <div className="toolbar__copy">
+          <p className="panel__eyebrow">Bibliothek</p>
+          <h2>{compact ? 'Quellen und Segmente' : 'Dateien laden und Analyse vorbereiten'}</h2>
+          {compact ? null : <p className="toolbar__hint">Videoquelle und Segmentdatei werden zentral verwaltet, damit Player und Filter immer denselben Stand zeigen.</p>}
+        </div>
+
+        <div className="toolbar__actions">
+          <button className="button button--primary" type="button" onClick={() => void onLoadVideo()}>
+            Video laden
+          </button>
+          <button className="button" type="button" onClick={() => void onLoadCsv()}>
+            CSV laden
+          </button>
+        </div>
       </div>
 
       <div className="toolbar__meta">
