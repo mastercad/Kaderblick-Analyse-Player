@@ -17,8 +17,9 @@
   "type": "module",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "tsc --noEmit && electron-vite build && electron-builder --publish never",
-    "build:dir": "tsc --noEmit && electron-vite build && electron-builder --dir",
+    "build": "npm run build:clean-unpacked && tsc --noEmit && electron-vite build && electron-builder --publish never",
+    "build:dir": "npm run build:clean-unpacked && tsc --noEmit && electron-vite build && electron-builder --dir",
+    "build:clean-unpacked": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const dir of ['release/linux-unpacked', 'release/win-unpacked']) { rmSync(dir, { recursive: true, force: true }); }\"",
     "preview": "electron-vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -31,6 +32,10 @@
     "productName": "Kaderblick Analyse Player",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "executableName": "kaderblick-analyse-player",
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**/*",
+      "node_modules/ffprobe-static/**/*"
+    ],
     "files": [
       "out/**/*",
       "package.json"
@@ -82,6 +87,8 @@
     }
   },
   "dependencies": {
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0",
     "papaparse": "^5.5.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

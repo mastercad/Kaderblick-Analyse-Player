@@ -1,9 +1,9 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { BrowserWindow, dialog } from 'electron'
 import { normalizeImportedPresets } from '../common/filterUtils'
 import type { AppSettingsExport, CsvFileDescriptor, FilterPreset, VideoFileDescriptor } from '../common/types'
+import { preparePlaybackFallback, prepareVideoFileForPlayback } from './videoPlayback'
 
 const videoExtensions = ['mp4', 'mov', 'mkv', 'avi', 'm4v', 'webm']
 
@@ -11,8 +11,10 @@ const getActiveWindow = (): BrowserWindow | null => {
   return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
 }
 
-export const pickVideoFile = async (): Promise<VideoFileDescriptor | undefined> => {
-  const result = await dialog.showOpenDialog(getActiveWindow(), {
+export const pickVideoFile = async (ownerWindow?: BrowserWindow | null): Promise<VideoFileDescriptor | undefined> => {
+  const activeWindow = ownerWindow ?? getActiveWindow()
+
+  const result = await dialog.showOpenDialog(activeWindow, {
     title: 'Video auswahlen',
     properties: ['openFile'],
     filters: [
@@ -32,12 +34,71 @@ export const pickVideoFile = async (): Promise<VideoFileDescriptor | undefined> 
   }
 
   const selectedPath = result.filePaths[0]
+  return prepareVideoFileForPlayback(selectedPath, {
+    onProgress: (progress) => activeWindow?.webContents.send('video:preparationProgress', progress)
+  })
+}
 
-  return {
-    path: selectedPath,
-    fileName: path.basename(selectedPath),
-    fileUrl: pathToFileURL(selectedPath).toString()
+export const pickVideoFiles = async (ownerWindow?: BrowserWindow | null): Promise<VideoFileDescriptor[]> => {
+  const activeWindow = ownerWindow ?? getActiveWindow()
+
+  const result = await dialog.showOpenDialog(activeWindow ?? undefined, {
+    title: 'Videos auswählen',
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      {
+        name: 'Video',
+        extensions: videoExtensions
+      },
+      {
+        name: 'Alle Dateien',
+        extensions: ['*']
+      }
+    ]
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null
   }
+
+  const videos: VideoFileDescriptor[] = []
+  const failures: string[] = []
+  for (const filePath of result.filePaths) {
+    try {
+      const video = await prepareVideoFileForPlayback(filePath, {
+        onProgress: (progress) => activeWindow?.webContents.send('video:preparationProgress', progress)
+      })
+      videos.push(video)
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      failures.push(`"${path.basename(filePath)}": ${detail}`)
+      console.warn(`Video konnte nicht vorbereitet werden: ${filePath}`, error)
+    }
+  }
+
+  if (videos.length === 0) {
+    await dialog.showMessageBox(activeWindow ?? undefined, {
+      type: 'error',
+      title: 'Video konnte nicht geladen werden',
+      message: 'Die ausgewählte Datei konnte nicht geöffnet werden.',
+      detail: failures.join('\n'),
+      buttons: ['OK']
+    })
+    throw new Error(failures.join('\n'))
+  }
+
+  return videos
+}
+
+export const preparePlaybackFallbackForPath = async (
+  sourcePath: string,
+  ownerWindow?: BrowserWindow | null
+): Promise<VideoFileDescriptor> => {
+  const activeWindow = ownerWindow ?? getActiveWindow()
+
+  return preparePlaybackFallback(sourcePath, {
+    onProgress: (progress) => activeWindow?.webContents.send('video:preparationProgress', progress)
+  })
 }
 
 export const pickCsvFile = async (): Promise<CsvFileDescriptor | undefined> => {

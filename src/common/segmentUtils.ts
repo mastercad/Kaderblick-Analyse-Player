@@ -70,6 +70,11 @@ export const matchSegmentsToVideo = (segments: Segment[], videoFileName: string)
   return segments.filter((segment) => segment.sourceVideoName.toLowerCase() === target)
 }
 
+export const matchSegmentsToVideos = (segments: Segment[], videoFileNames: string[]): Segment[] => {
+  const targets = new Set(videoFileNames.map((n) => n.trim().toLowerCase()))
+  return segments.filter((segment) => targets.has(segment.sourceVideoName.toLowerCase()))
+}
+
 export const findActiveSegmentIndex = (segments: Segment[], currentTimeSeconds: number): number => {
   return segments.findIndex(
     (segment) => currentTimeSeconds >= segment.startSeconds && currentTimeSeconds < segment.endSeconds

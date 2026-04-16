@@ -41,6 +41,18 @@ export interface VideoFileDescriptor {
   path: string
   fileName: string
   fileUrl: string
+  playbackMode: 'direct' | 'proxy' | 'stream'
+  sourceCodec?: string
+  durationSeconds?: number
+  playbackPath?: string
+  playbackLabel?: string
+  playbackHint?: string
+}
+
+export interface VideoPreparationProgress {
+  phase: 'idle' | 'analyzing' | 'transcoding' | 'ready' | 'error'
+  message: string
+  percent?: number
 }
 
 export interface CsvFileDescriptor {

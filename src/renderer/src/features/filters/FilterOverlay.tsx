@@ -25,13 +25,13 @@ const controls: Array<{
   step: number
   unit: string
 }> = [
-  { key: 'blur', label: 'Gaussian Blur', min: 0, max: 20, step: 0.1, unit: 'px' },
-  { key: 'brightness', label: 'Brightness', min: 0, max: 300, step: 1, unit: '%' },
-  { key: 'contrast', label: 'Contrast', min: 0, max: 300, step: 1, unit: '%' },
-  { key: 'grayscale', label: 'Grayscale', min: 0, max: 100, step: 1, unit: '%' },
-  { key: 'hueRotate', label: 'Hue Rotation', min: 0, max: 360, step: 1, unit: 'deg' },
-  { key: 'invert', label: 'Color Inversion', min: 0, max: 100, step: 1, unit: '%' },
-  { key: 'saturate', label: 'Saturation', min: 0, max: 300, step: 1, unit: '%' },
+  { key: 'blur', label: 'Weichzeichner', min: 0, max: 20, step: 0.1, unit: 'px' },
+  { key: 'brightness', label: 'Helligkeit', min: 0, max: 300, step: 1, unit: '%' },
+  { key: 'contrast', label: 'Kontrast', min: 0, max: 300, step: 1, unit: '%' },
+  { key: 'grayscale', label: 'Graustufen', min: 0, max: 100, step: 1, unit: '%' },
+  { key: 'hueRotate', label: 'Farbton', min: 0, max: 360, step: 1, unit: 'deg' },
+  { key: 'invert', label: 'Invertierung', min: 0, max: 100, step: 1, unit: '%' },
+  { key: 'saturate', label: 'Sättigung', min: 0, max: 300, step: 1, unit: '%' },
   { key: 'sepia', label: 'Sepia', min: 0, max: 100, step: 1, unit: '%' }
 ]
 
@@ -71,7 +71,7 @@ export function FilterOverlay({
       <div className="filter-overlay__header">
         <div>
           <p className="panel__eyebrow">Live-Filter</p>
-          <h2>Kompakte Bildkorrektur</h2>
+          <h2>Bildkorrektur</h2>
         </div>
         <div className="filter-preset-bar">
           <label className="filter-preset-bar__select-wrap">
@@ -114,7 +114,7 @@ export function FilterOverlay({
           Export
         </button>
         <button className="button button--subtle" disabled={selectedPresetBuiltIn} type="button" onClick={() => void onDeletePreset()}>
-          Loeschen
+          Löschen
         </button>
       </div>
 

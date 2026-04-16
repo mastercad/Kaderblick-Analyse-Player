@@ -21,7 +21,7 @@ Dort konnt ihr:
 
 - das erste Video laden
 - die Segmentdatei laden
-- den Uber-die-App-Bereich offnen
+- den Über-die-App-Bereich offnen
 - die aktuellen App-Einstellungen als Datei sichern
 
 ## Was ihr im Player machen konnt
@@ -35,7 +35,7 @@ Dort konnt ihr:
 
 ## Filter benutzen
 
-Uber dem Video gibt es einen Filterbereich. Dort konnt ihr das Bild wahrend der Wiedergabe direkt anpassen.
+Über dem Video gibt es einen Filterbereich. Dort konnt ihr das Bild wahrend der Wiedergabe direkt anpassen.
 
 Die Filter sind jetzt kompakt aufgebaut:
 
@@ -88,7 +88,7 @@ Dabei werden zum Beispiel gesichert:
 
 Das ist hilfreich, wenn ihr einen Analysezustand dokumentieren oder spaeter wieder nachvollziehen wollt.
 
-## Uber die App
+## Über die App
 
 Im Bereich `Ueber die App` seht ihr die wichtigsten Informationen zur Anwendung, zur Version und zu den wichtigsten Kurzkuerzeln.
 

@@ -8,7 +8,10 @@ const configDirectory = path.dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   main: {
     build: {
-      outDir: 'out/main'
+      outDir: 'out/main',
+      rollupOptions: {
+        external: ['ffmpeg-static', 'ffprobe-static']
+      }
     }
   },
   preload: {

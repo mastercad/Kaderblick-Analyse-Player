@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { defaultAppInfo } from '../../../common/appInfo'
 import { buildAppSettingsExport } from '../../../common/appSettings'
 import { builtInFilterPresets, defaultFilterSettings } from '../../../common/filterPresets'
 import { areFilterSettingsEqual, mergeCustomPresets, sanitizeFilterSettings } from '../../../common/filterUtils'
-import { matchSegmentsToVideo, parseSegmentsCsv } from '../../../common/segmentUtils'
-import type { AppInfo, CsvFileDescriptor, FilterPreset, FilterSettings, Segment, VideoFileDescriptor } from '../../../common/types'
+import { matchSegmentsToVideo, matchSegmentsToVideos, parseSegmentsCsv } from '../../../common/segmentUtils'
+import { formatClockTime } from '../../../common/timeUtils'
+import type { AppInfo, CsvFileDescriptor, FilterPreset, FilterSettings, Segment, VideoFileDescriptor, VideoPreparationProgress } from '../../../common/types'
 import { AboutDialog } from '../features/app/AboutDialog'
 import { StartScreen } from '../features/app/StartScreen'
 import { FilterOverlay } from '../features/filters/FilterOverlay'
@@ -32,7 +33,9 @@ function getInitialTheme(): ThemeMode {
 }
 
 export function App() {
-  const [selectedVideo, setSelectedVideo] = useState<VideoFileDescriptor>()
+  const [videoLibrary, setVideoLibrary] = useState<VideoFileDescriptor[]>([])
+  const [activeVideoIndex, setActiveVideoIndex] = useState(0)
+  const [autoStartSegmentsOnLoad, setAutoStartSegmentsOnLoad] = useState(false)
   const [selectedCsv, setSelectedCsv] = useState<CsvFileDescriptor>()
   const [allSegments, setAllSegments] = useState<Segment[]>([])
   const [customPresets, setCustomPresets] = useState<FilterPreset[]>([])
@@ -40,18 +43,27 @@ export function App() {
   const [selectedPresetId, setSelectedPresetId] = useState<string>(defaultPresetId)
   const [presetNameDraft, setPresetNameDraft] = useState('')
   const [statusMessage, setStatusMessage] = useState('Video und CSV laden, um mit der Analyse zu starten.')
-  const [filterOverlayVisible, setFilterOverlayVisible] = useState(true)
+  const [filterOverlayVisible, setFilterOverlayVisible] = useState(false)
   const [repeatSingleSegment, setRepeatSingleSegment] = useState(false)
   const [aboutDialogVisible, setAboutDialogVisible] = useState(false)
   const [appInfo, setAppInfo] = useState<AppInfo>(defaultAppInfo)
   const [presetSaveDialogVisible, setPresetSaveDialogVisible] = useState(false)
   const [presetSaveMode, setPresetSaveMode] = useState<'new' | 'save'>('save')
   const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialTheme)
+  const [videoPreparationProgress, setVideoPreparationProgress] = useState<VideoPreparationProgress>({
+    phase: 'idle',
+    message: ''
+  })
+  const [isRecoveringPlayback, setIsRecoveringPlayback] = useState(false)
+  const [autoPlayRecoveredVideo, setAutoPlayRecoveredVideo] = useState(false)
+  const isRecoveringPlaybackRef = useRef(false)
 
+  const selectedVideo = videoLibrary[activeVideoIndex]
   const presets = [...builtInFilterPresets, ...customPresets]
   const matchedSegments = selectedVideo ? matchSegmentsToVideo(allSegments, selectedVideo.fileName) : []
+  const matchedSegmentsAllVideos = videoLibrary.length > 0 ? matchSegmentsToVideos(allSegments, videoLibrary.map((v) => v.fileName)) : []
   const selectedPreset = presets.find((preset) => preset.id === selectedPresetId) ?? builtInFilterPresets[0]
-  const showStartScreen = !selectedVideo && !selectedCsv
+  const showStartScreen = videoLibrary.length === 0 && !selectedCsv
   const isPresetDirty = !areFilterSettingsEqual(selectedPreset.settings, filterSettings)
 
   useEffect(() => {
@@ -86,6 +98,25 @@ export function App() {
     window.localStorage.setItem(themeStorageKey, themeMode)
   }, [themeMode])
 
+  useEffect(() => {
+    return window.desktopApi.onVideoPreparationProgress((progress) => {
+      if (progress.phase === 'idle') {
+        setVideoPreparationProgress(progress)
+        return
+      }
+
+      if (progress.phase === 'ready') {
+        setVideoPreparationProgress({ phase: 'idle', message: '' })
+        setStatusMessage(progress.message)
+        return
+      }
+
+      setVideoPreparationProgress(progress)
+
+      setStatusMessage(progress.message)
+    })
+  }, [])
+
   const persistCustomPresets = async (nextPresets: FilterPreset[], message?: string): Promise<void> => {
     setCustomPresets(nextPresets)
     await window.desktopApi.saveStoredPresets(nextPresets)
@@ -94,16 +125,91 @@ export function App() {
     }
   }
 
-  const handleLoadVideo = async (): Promise<void> => {
-    const video = await window.desktopApi.pickVideoFile()
-
-    if (!video) {
+  const handleLoadVideos = async (): Promise<void> => {
+    let videos: VideoFileDescriptor[] | null
+    try {
+      videos = await window.desktopApi.pickVideoFiles()
+    } catch {
+      setStatusMessage('Video konnte nicht geladen werden.')
       return
     }
 
-    setSelectedVideo(video)
-    const segmentCount = matchSegmentsToVideo(allSegments, video.fileName).length
-    setStatusMessage(`${video.fileName} geladen. ${segmentCount} passende Segmente gefunden.`)
+    if (videos === null) {
+      return
+    }
+
+    isRecoveringPlaybackRef.current = false
+    setIsRecoveringPlayback(false)
+    setAutoStartSegmentsOnLoad(false)
+    setAutoPlayRecoveredVideo(true)
+    setVideoLibrary(videos)
+    setActiveVideoIndex(0)
+    setStatusMessage(`${videos.length} Video${videos.length !== 1 ? 's' : ''} geladen.`)
+  }
+
+  const handleAddVideos = async (): Promise<void> => {
+    let videos: VideoFileDescriptor[] | null
+    try {
+      videos = await window.desktopApi.pickVideoFiles()
+    } catch {
+      setStatusMessage('Video konnte nicht hinzugefügt werden.')
+      return
+    }
+
+    if (!videos || !videos.length) {
+      return
+    }
+
+    setVideoLibrary((prev) => {
+      const existingPaths = new Set(prev.map((v) => v.path))
+      const newVideos = videos.filter((v) => !existingPaths.has(v.path))
+      return [...prev, ...newVideos]
+    })
+    setStatusMessage(`${videos.length} Video${videos.length !== 1 ? 's' : ''} hinzugefügt.`)
+  }
+
+  const handleSelectVideo = (index: number): void => {
+    isRecoveringPlaybackRef.current = false
+    setIsRecoveringPlayback(false)
+    setAutoPlayRecoveredVideo(false)
+    setAutoStartSegmentsOnLoad(false)
+    setActiveVideoIndex(index)
+  }
+
+  const handleAllSegmentsDone = (): void => {
+    isRecoveringPlaybackRef.current = false
+    setIsRecoveringPlayback(false)
+    setAutoPlayRecoveredVideo(false)
+
+    if (allSegments.length > 0) {
+      for (let i = activeVideoIndex + 1; i < videoLibrary.length; i++) {
+        if (matchSegmentsToVideo(allSegments, videoLibrary[i].fileName).length > 0) {
+          setActiveVideoIndex(i)
+          setAutoPlayRecoveredVideo(true)
+          setAutoStartSegmentsOnLoad(true)
+          return
+        }
+      }
+      setAutoStartSegmentsOnLoad(false)
+    } else {
+      setAutoStartSegmentsOnLoad(false)
+      if (activeVideoIndex + 1 < videoLibrary.length) {
+        setActiveVideoIndex(activeVideoIndex + 1)
+        setAutoPlayRecoveredVideo(true)
+      }
+    }
+  }
+
+  const handleVideoEnded = (): void => {
+    isRecoveringPlaybackRef.current = false
+    setIsRecoveringPlayback(false)
+    setAutoStartSegmentsOnLoad(false)
+    setAutoPlayRecoveredVideo(false)
+
+    if (activeVideoIndex + 1 < videoLibrary.length) {
+      setActiveVideoIndex(activeVideoIndex + 1)
+      setAutoPlayRecoveredVideo(true)
+    }
   }
 
   const handleLoadCsv = async (): Promise<void> => {
@@ -118,8 +224,8 @@ export function App() {
       setSelectedCsv(csvFile)
       setAllSegments(parsedSegments)
 
-      const segmentCount = selectedVideo ? matchSegmentsToVideo(parsedSegments, selectedVideo.fileName).length : 0
-      setStatusMessage(`${csvFile.fileName} geladen. ${parsedSegments.length} Segmente importiert, ${segmentCount} davon passen zum aktuellen Video.`)
+      const segmentCount = videoLibrary.length > 0 ? matchSegmentsToVideos(parsedSegments, videoLibrary.map((v) => v.fileName)).length : 0
+      setStatusMessage(`${csvFile.fileName} geladen. ${parsedSegments.length} Segmente importiert, ${segmentCount} davon passen zu den geladenen Videos.`)
     } catch {
       setStatusMessage('Die CSV-Datei konnte nicht gelesen werden. Bitte Format und Spaltennamen pruefen.')
     }
@@ -278,8 +384,7 @@ export function App() {
             </div>
             <div className="brand-copy">
               <p className="shell__eyebrow">Desktop-App</p>
-              <h1>Intuitive Videoanalyse fuer Spielszenen und Segmente</h1>
-              <p className="shell__subline">Klarer Player-Fokus mit Kaderblick Branding, Light- und Dark-Mode sowie direktem Zugriff auf Segmente und Bildfilter.</p>
+              <h1>Spielszenen direkt aufrufen.</h1>
             </div>
           </div>
 
@@ -303,6 +408,17 @@ export function App() {
               </button>
             </div>
             <p className="shell__status">{statusMessage}</p>
+            {videoPreparationProgress.phase !== 'idle' ? (
+              <div className="status-progress-card" role="status" aria-live="polite">
+                <strong>{videoPreparationProgress.phase === 'transcoding' ? 'Video wird umgewandelt' : 'Videoanalyse'}</strong>
+                <span>{videoPreparationProgress.message}</span>
+                {typeof videoPreparationProgress.percent === 'number' ? (
+                  <div className="status-progress-bar" aria-hidden="true">
+                    <span className="status-progress-bar__fill" style={{ width: `${videoPreparationProgress.percent}%` }} />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       </header>
@@ -310,11 +426,14 @@ export function App() {
       <div className="shell__content">
         <LibraryToolbar
           compact={!showStartScreen}
-          selectedVideo={selectedVideo}
+          videoLibrary={videoLibrary}
+          activeVideoIndex={activeVideoIndex}
           selectedCsv={selectedCsv}
-          matchedSegmentCount={matchedSegments.length}
+          matchedSegmentCount={matchedSegmentsAllVideos.length}
           totalSegmentCount={allSegments.length}
-          onLoadVideo={handleLoadVideo}
+          onLoadVideos={handleLoadVideos}
+          onAddVideos={handleAddVideos}
+          onSelectVideo={handleSelectVideo}
           onLoadCsv={handleLoadCsv}
         />
 
@@ -323,7 +442,7 @@ export function App() {
             {showStartScreen ? (
               <StartScreen
                 appInfo={appInfo}
-                onLoadVideo={handleLoadVideo}
+                onLoadVideo={handleLoadVideos}
                 onLoadCsv={handleLoadCsv}
                 onOpenAbout={() => setAboutDialogVisible(true)}
                 onExportAppSettings={handleExportAppSettings}
@@ -337,6 +456,68 @@ export function App() {
                 repeatSingleSegment={repeatSingleSegment}
                 onRepeatSingleSegmentChange={setRepeatSingleSegment}
                 onToggleFilterOverlay={() => setFilterOverlayVisible((visible) => !visible)}
+                playbackRecoveryInProgress={isRecoveringPlayback}
+                autoPlayOnLoad={autoPlayRecoveredVideo}
+                autoStartSegmentsOnLoad={autoStartSegmentsOnLoad}
+                onAllSegmentsDone={handleAllSegmentsDone}
+                onVideoEnded={handleVideoEnded}
+                onVideoLoaded={(durationSeconds) => {
+                  if (!selectedVideo) {
+                    return
+                  }
+
+                  isRecoveringPlaybackRef.current = false
+                  setIsRecoveringPlayback(false)
+                  setAutoPlayRecoveredVideo(false)
+                  setAutoStartSegmentsOnLoad(false)
+
+                  setStatusMessage(
+                    `${selectedVideo.fileName} ist bereit. Dauer ${formatClockTime(durationSeconds)}. ${matchedSegments.length} passende Segmente gefunden.`
+                  )
+                }}
+                onVideoError={(message, recoverable) => {
+                  if (!selectedVideo) {
+                    setStatusMessage(message)
+                    return
+                  }
+
+                  // If already in proxy or stream mode, just show the error — no further fallback
+                  if (selectedVideo.playbackMode === 'proxy' || selectedVideo.playbackMode === 'stream') {
+                    isRecoveringPlaybackRef.current = false
+                    setIsRecoveringPlayback(false)
+                    setStatusMessage(message)
+                    return
+                  }
+
+                  if (isRecoveringPlaybackRef.current || isRecoveringPlayback) {
+                    return
+                  }
+
+                  if (!recoverable) {
+                    setStatusMessage(message)
+                    return
+                  }
+
+                  // Automatically switch to ffmpeg streaming — no dialog, no waiting
+                  isRecoveringPlaybackRef.current = true
+                  setIsRecoveringPlayback(true)
+
+                  void window.desktopApi.prepareStreamingPlayback(selectedVideo.path)
+                    .then((streamDescriptor) => {
+                      setVideoLibrary((prev) => {
+                        const next = [...prev]
+                        next[activeVideoIndex] = streamDescriptor
+                        return next
+                      })
+                      isRecoveringPlaybackRef.current = false
+                      setIsRecoveringPlayback(false)
+                    })
+                    .catch((streamError) => {
+                      isRecoveringPlaybackRef.current = false
+                      setIsRecoveringPlayback(false)
+                      setStatusMessage(streamError instanceof Error ? streamError.message : message)
+                    })
+                }}
                 overlayDialogs={(
                   <>
                     <AboutDialog appInfo={appInfo} open={aboutDialogVisible} onClose={() => setAboutDialogVisible(false)} />

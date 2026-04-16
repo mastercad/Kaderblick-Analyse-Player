@@ -2,9 +2,9 @@
 
 ## Ziel
 
-Die Anwendung ist eine plattformubergreifende Desktop-App fur die gemeinsame Videoanalyse. Der Fokus liegt auf stabiler lokaler Wiedergabe, CSV-basierten Segmenten, Live-Filtern und klar getrennten Zuständigkeiten im Quellcode.
+Die Anwendung ist eine plattformübergreifende Desktop-App fur die gemeinsame Videoanalyse. Der Fokus liegt auf stabiler lokaler Wiedergabe, CSV-basierten Segmenten, Live-Filtern und klar getrennten Zuständigkeiten im Quellcode.
 
-## Architekturuberblick
+## Architekturüberblick
 
 Die App besteht aus drei Schichten:
 
@@ -26,7 +26,7 @@ Die App besteht aus drei Schichten:
 - `src/renderer/src/app`
   App-Zusammenbau, Layout und globale Hooks.
 - `src/renderer/src/features/app`
-  Startbild, App-Metadaten und Uber-die-App-Dialog.
+  Startbild, App-Metadaten und Über-die-App-Dialog.
 - `src/renderer/src/features/player`
   Videoelement, Timeline, Segmentnavigation, Vollbild und Segment-Modus.
 - `src/renderer/src/features/filters`
@@ -40,14 +40,14 @@ Die App besteht aus drei Schichten:
 
 ### Segmentzuordnung
 
-- In der CSV wird nur der Dateiname des Videopfads fur das Matching verwendet.
+- In der CSV wird nur der Dateiname des Videopfads für das Matching verwendet.
 - Alle Segmente mit passendem Dateinamen werden geladen.
 - Die Segmente werden nach Startzeit sortiert.
 
 ### Segmentmodus
 
 - Im Modus "Nur Segmente abspielen" werden definierte Segmente der Reihe nach abgespielt.
-- Bereiche zwischen Segmenten werden automatisch ubersprungen.
+- Bereiche zwischen Segmenten werden automatisch übersprungen.
 - Sind keine weiteren Segmente vorhanden, pausiert die Wiedergabe.
 - Optional kann ein einzelnes aktives Segment in Endlosschleife wiederholt werden.
 - Die Segmentliste folgt dem aktuell aktiven Segment automatisch, damit im Team immer sichtbar bleibt, welche Szene gerade lauft.
@@ -60,7 +60,7 @@ Die App besteht aus drei Schichten:
 - Benutzerdefinierte Presets werden im Electron-`userData`-Verzeichnis abgelegt.
 - Das aktive Preset wird als `dirty` behandelt, sobald Filterwerte von den Presetwerten abweichen.
 - Das Filter-Overlay integriert Presetauswahl, Neu-Anlage, Speichern, Import und Export direkt im Overlay statt in einer separaten Seitenleiste.
-- Beim Speichern fragt ein Dialog, ob ein bestehendes benutzerdefiniertes Preset uberschrieben oder ein neues Preset angelegt werden soll.
+- Beim Speichern fragt ein Dialog, ob ein bestehendes benutzerdefiniertes Preset überschrieben oder ein neues Preset angelegt werden soll.
 
 ### Vollbild
 
@@ -70,8 +70,8 @@ Die App besteht aus drei Schichten:
 
 ### App-Metadaten und Einstellungen
 
-- Der Renderer laedt App-Informationen uber die Preload-API aus dem Main Process.
-- Ein Uber-die-App-Dialog zeigt Produktname, Version, Kontakt und die wichtigsten Funktionen.
+- Der Renderer laedt App-Informationen über die Preload-API aus dem Main Process.
+- Ein Über-die-App-Dialog zeigt Produktname, Version, Kontakt und die wichtigsten Funktionen.
 - Aktuelle App-Einstellungen lassen sich als JSON exportieren.
 - Der Export umfasst geladene Quellen, Filterzustand, Presetauswahl, benutzerdefinierte Presets und UI-Zustaende wie Filter-Sichtbarkeit oder Einzelwiederholung.
 
@@ -81,8 +81,8 @@ Die Teststrategie trennt reine Fachlogik von UI:
 
 1. Unit-Tests fur CSV-Parsing, Segmentnavigation und Filterumrechnung.
 2. Component-Tests fur zentrale UI-Elemente.
-3. Electron-nahe Funktionen bleiben dunn und werden uber reine Helfer testbar gehalten.
-4. Exportformate wie App-Einstellungen werden uber reine Common-Module getestet.
+3. Electron-nahe Funktionen bleiben werden über reine Helfer testbar gehalten.
+4. Exportformate wie App-Einstellungen werden über reine Common-Module getestet.
 
 ## Build und Auslieferung
 
@@ -90,7 +90,7 @@ Die Teststrategie trennt reine Fachlogik von UI:
 - Tests: `npm test`
 - Paketbau: `npm run build`
 
-Der Build erzeugt Pakete fur Linux und Windows uber `electron-builder`.
+Der Build erzeugt Pakete fur Linux und Windows über `electron-builder`.
 
 ## Branding und Installer
 

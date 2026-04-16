@@ -1,10 +1,24 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, protocol } from 'electron'
 import { defaultAppInfo } from '../common/appInfo'
+import { KVIDEO_SCHEME } from '../common/streaming'
 import type { AppSettingsExport, FilterPreset } from '../common/types'
-import { exportAppSettingsToJson, exportPresetsToJson, importPresetsFromJson, pickCsvFile, pickVideoFile } from './dialogs'
+import { exportAppSettingsToJson, exportPresetsToJson, importPresetsFromJson, pickCsvFile, pickVideoFile, pickVideoFiles, preparePlaybackFallbackForPath } from './dialogs'
 import { readStoredPresets, writeStoredPresets } from './presetStorage'
+import { initStreamingProtocol, registerStreamingProtocol } from './streamingProtocol'
+import { ffmpegExecutable, getKeyframeTimes, prepareStreamingPlayback } from './videoPlayback'
+
+protocol.registerSchemesAsPrivileged([{
+  scheme: KVIDEO_SCHEME,
+  privileges: {
+    secure: true,
+    standard: true,
+    stream: true,
+    supportFetchAPI: true,
+    corsEnabled: true
+  }
+}])
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
 
@@ -41,7 +55,16 @@ const createWindow = (): void => {
 app.whenReady().then(() => {
   app.setAppUserModelId('de.fussballverein.video-player')
 
-  ipcMain.handle('dialog:pickVideoFile', () => pickVideoFile())
+  initStreamingProtocol(ffmpegExecutable)
+  registerStreamingProtocol()
+
+  ipcMain.handle('dialog:pickVideoFile', (event) => pickVideoFile(BrowserWindow.fromWebContents(event.sender)))
+  ipcMain.handle('dialog:pickVideoFiles', (event) => pickVideoFiles(BrowserWindow.fromWebContents(event.sender)))
+  ipcMain.handle('video:preparePlaybackFallback', (event, sourcePath: string) => {
+    return preparePlaybackFallbackForPath(sourcePath, BrowserWindow.fromWebContents(event.sender))
+  })
+  ipcMain.handle('video:prepareStreamingPlayback', (_, sourcePath: string) => prepareStreamingPlayback(sourcePath))
+  ipcMain.handle('video:getKeyframeTimes', (_, sourcePath: string) => getKeyframeTimes(sourcePath))
   ipcMain.handle('dialog:pickCsvFile', () => pickCsvFile())
   ipcMain.handle('presets:load', () => readStoredPresets())
   ipcMain.handle('presets:save', (_, presets: FilterPreset[]) => writeStoredPresets(presets))
