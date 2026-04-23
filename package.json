@@ -63,13 +63,23 @@
         }
       }
     },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "assets/icon.icns",
+      "identity": null
+    },
     "win": {
       "target": [
         "nsis",
         "portable"
       ],
       "icon": "assets/icon.ico",
-      "legalTrademarks": "Kaderblick Analyse Player"
+      "legalTrademarks": "Kaderblick Analyse Player",
+      "signingHashAlgorithms": null,
+      "sign": null
     },
     "portable": {
       "artifactName": "${productName}-${version}-portable-${arch}.${ext}"
