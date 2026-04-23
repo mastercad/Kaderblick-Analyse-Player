@@ -77,9 +77,7 @@
         "portable"
       ],
       "icon": "assets/icon.ico",
-      "legalTrademarks": "Kaderblick Analyse Player",
-      "signingHashAlgorithms": null,
-      "sign": null
+      "legalTrademarks": "Kaderblick Analyse Player"
     },
     "portable": {
       "artifactName": "${productName}-${version}-portable-${arch}.${ext}"
