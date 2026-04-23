@@ -1,0 +1,68 @@
+name: Manuelles Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versionsnummer ohne "v" (z.B. 1.0.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  create_release:
+    name: Tag und GitHub Release anlegen
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.set_tag.outputs.tag }}
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Git-Benutzer konfigurieren
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: package.json-Version setzen
+        run: npm version ${{ inputs.version }} --no-git-tag-version
+
+      - name: Versionsaenderung committen und pushen
+        run: |
+          git add package.json package-lock.json
+          git commit -m "chore(release): ${{ inputs.version }} [skip ci]"
+          git push
+
+      - name: Tag erstellen und pushen
+        id: set_tag
+        run: |
+          TAG="v${{ inputs.version }}"
+          git tag "$TAG"
+          git push origin "$TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: GitHub Release anlegen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.set_tag.outputs.tag }}
+          name: ${{ steps.set_tag.outputs.tag }}
+          generate_release_notes: true
+
+  artifacts:
+    name: Release-Artefakte bauen
+    needs: create_release
+    uses: ./.github/workflows/release-artifacts.yml
+    with:
+      tag: ${{ needs.create_release.outputs.tag }}
