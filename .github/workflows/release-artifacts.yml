@@ -74,12 +74,44 @@ jobs:
             release/*-portable-*.exe
           if-no-files-found: error
 
+  build_macos:
+    name: macOS Pakete bauen
+    runs-on: macos-latest
+
+    steps:
+      - name: Repository am Release-Tag auschecken
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Abhaengigkeiten installieren
+        run: npm ci
+
+      - name: macOS Release bauen
+        run: npm run build
+
+      - name: macOS Artefakte hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: |
+            release/*.dmg
+            release/*.zip
+          if-no-files-found: error
+
   attach_assets:
     name: Artefakte ans Release haengen
     runs-on: ubuntu-latest
     needs:
       - build_linux
       - build_windows
+      - build_macos
 
     steps:
       - name: Linux Artefakte herunterladen
@@ -94,6 +126,12 @@ jobs:
           name: windows-release
           path: dist-artifacts/windows
 
+      - name: macOS Artefakte herunterladen
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-release
+          path: dist-artifacts/macos
+
       - name: Release-Dateien hochladen
         uses: softprops/action-gh-release@v2
         with:
@@ -102,3 +140,5 @@ jobs:
             dist-artifacts/**/*.AppImage
             dist-artifacts/**/*.deb
             dist-artifacts/**/*.exe
+            dist-artifacts/**/*.dmg
+            dist-artifacts/**/*.zip
