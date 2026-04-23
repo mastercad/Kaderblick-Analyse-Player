@@ -37,23 +37,33 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: package.json-Version setzen
-        run: npm version ${{ inputs.version }} --no-git-tag-version
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          if [ "$CURRENT" != "${{ inputs.version }}" ]; then
+            npm version ${{ inputs.version }} --no-git-tag-version
+          else
+            echo "Version ist bereits ${{ inputs.version }}, keine Aenderung noetig"
+          fi
 
       - name: Versionsaenderung committen und pushen
         run: |
           git add package.json package-lock.json
-          git commit -m "chore(release): ${{ inputs.version }} [skip ci]"
+          git diff --cached --quiet && echo "Keine Aenderung noetig" || git commit -m "chore(release): ${{ inputs.version }} [skip ci]"
           git push
 
       - name: Tag erstellen und pushen
         id: set_tag
         run: |
           TAG="v${{ inputs.version }}"
-          git tag "$TAG"
-          git push origin "$TAG"
+          if git ls-remote --tags origin "$TAG" | grep -q "$TAG"; then
+            echo "Tag $TAG existiert bereits, wird uebersprungen"
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: GitHub Release anlegen
+      - name: GitHub Release anlegen oder aktualisieren
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.set_tag.outputs.tag }}
