@@ -79,6 +79,19 @@ export interface AppInfo {
   authorEmail: string
 }
 
+export interface SessionSnapshot {
+  savedAt: string
+  videoLibrary: VideoFileDescriptor[]
+  activeVideoIndex: number
+  csvFileName?: string
+  csvPath?: string
+  csvContent?: string
+  filterSettings: FilterSettings
+  filterOverlayVisible: boolean
+  repeatSingleSegment: boolean
+  selectedPresetId: string
+}
+
 export interface AppSettingsExport {
   appName: string
   appVersion: string

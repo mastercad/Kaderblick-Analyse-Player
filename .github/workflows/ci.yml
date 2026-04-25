@@ -8,7 +8,7 @@ on:
 
 jobs:
   commit_messages:
-    name: Commit-Messages pruefen
+    name: Commit-Messages prüfen
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
 
@@ -24,10 +24,10 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Abhaengigkeiten installieren
+      - name: Abhängigkeiten installieren
         run: npm ci
 
-      - name: Commitlint ausfuehren
+      - name: Commitlint ausführen
         shell: bash
         run: |
           npx commitlint --from "origin/${{ github.base_ref }}" --to "${{ github.sha }}" --verbose
@@ -46,11 +46,11 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Abhaengigkeiten installieren
+      - name: Abhängigkeiten installieren
         run: npm ci
 
-      - name: Linter ausfuehren
+      - name: Linter ausführen
         run: npm run lint
 
-      - name: Tests ausfuehren
+      - name: Tests ausführen
         run: npm test

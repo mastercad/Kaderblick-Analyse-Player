@@ -42,12 +42,12 @@ export function FilterPresetSaveDialog({
 
         <p className="about-text">
           {showOverwriteOption
-            ? `Du kannst das aktuelle Preset \"${selectedPresetName}\" ueberschreiben oder die Veraenderungen als neues Preset ablegen.`
-            : 'Vergib einen Namen fuer das neue Preset und speichere die aktuellen Filterwerte.'}
+            ? `Du kannst das aktuelle Preset \"${selectedPresetName}\" überschreiben oder die Veränderungen als neues Preset ablegen.`
+            : 'Vergib einen Namen für das neue Preset und speichere die aktuellen Filterwerte.'}
         </p>
 
         <label className="form-field">
-          <span>Name fuer neues Preset</span>
+          <span>Name für neues Preset</span>
           <input
             type="text"
             value={presetNameDraft}
@@ -59,7 +59,7 @@ export function FilterPresetSaveDialog({
         <div className="button-stack modal-card__actions">
           {showOverwriteOption ? (
             <button className="button" type="button" onClick={onOverwriteCurrent}>
-              Aktuelles Preset ueberschreiben
+              Aktuelles Preset überschreiben
             </button>
           ) : null}
           <button className="button button--primary" type="button" onClick={onSaveAsNew}>

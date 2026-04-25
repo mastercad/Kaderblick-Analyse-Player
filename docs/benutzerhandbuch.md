@@ -17,12 +17,10 @@ Der Name der App ist `Kaderblick Analyse Player`.
 
 Direkt nach dem Start zeigt die App eine grosse Einstiegsansicht.
 
-Dort konnt ihr:
+Dort könnt ihr:
 
-- das erste Video laden
+- die Videos laden
 - die Segmentdatei laden
-- den Über-die-App-Bereich offnen
-- die aktuellen App-Einstellungen als Datei sichern
 
 ## Was ihr im Player machen konnt
 
@@ -35,9 +33,9 @@ Dort konnt ihr:
 
 ## Filter benutzen
 
-Über dem Video gibt es einen Filterbereich. Dort konnt ihr das Bild wahrend der Wiedergabe direkt anpassen.
+Über dem Video gibt es einen Filterbereich. Dort konnt ihr das Bild während der Wiedergabe direkt anpassen.
 
-Die Filter sind jetzt kompakt aufgebaut:
+Die Filter sind kompakt aufgebaut:
 
 - links steht jeweils der Name des Filters
 - daneben seht ihr direkt den aktuellen Wert
@@ -45,52 +43,52 @@ Die Filter sind jetzt kompakt aufgebaut:
 
 Beispiele:
 
-- Helligkeit erhohen, wenn das Bild zu dunkel ist
-- Kontrast verstarken, wenn Linien oder Spieler schwer erkennbar sind
+- Helligkeit anheben, wenn das Bild zu dunkel ist
+- Kontrast verstärken, wenn Linien oder Spieler schwer erkennbar sind
 - Farben anpassen, wenn Trikots oder Markierungen deutlicher sichtbar werden sollen
 - Weichzeichnen, wenn das Bild unruhig oder sehr hart wirkt
 
-Mit `Reset` stellt ihr alles sofort auf die Ausgangswerte zuruck.
+Mit `Reset` stellt ihr alles auf die Ausgangswerte zuruck.
 
 ## Presets nutzen
 
 Presets sind gespeicherte Bildeinstellungen.
 
-Damit konnt ihr zum Beispiel fur bestimmte Kameras oder Wettersituationen eine passende Einstellung vorbereiten.
+Damit könnt ihr zum Beispiel fur bestimmte Kameras oder Wettersituationen eine passende Einstellung vorbereiten.
 
-Ihr konnt:
+Ihr könnt:
 
 - mitgelieferte Presets laden
 - eigene Presets speichern
 - Presets importieren
 - Presets exportieren
 
-Wenn ihr einen Filterwert verandert, zeigt die App an, dass das aktuelle Preset noch nicht gespeichert ist.
+Wenn ihr einen Filterwert verändert, zeigt die App an, dass das aktuelle Preset noch nicht gespeichert ist.
 
 Beim Speichern fragt die App dann, ob ihr:
 
-- das aktuelle eigene Preset ueberschreiben wollt
+- das aktuelle eigene Preset überschreiben wollt
 - oder ein neues Preset anlegen wollt
 
-Ein `+` im Filterbereich legt schnell ein neues Preset an. Das Speichersymbol speichert Veraenderungen.
+Ein `+` im Filterbereich legt ein neues Preset an. Das Speichersymbol speichert Veränderungen.
 
 ## App-Einstellungen sichern
 
-Wenn ihr euren aktuellen Stand festhalten wollt, konnt ihr die App-Einstellungen als JSON-Datei exportieren.
+Wenn ihr euren aktuellen Stand festhalten wollt, könnt ihr die App-Einstellungen als JSON-Datei exportieren.
 
 Dabei werden zum Beispiel gesichert:
 
-- welches Video geladen war
+- welche Videos geladen waren
 - welche CSV-Datei geladen war
 - welche Filter eingestellt waren
 - welches Preset aktiv war
 - welche eigenen Presets vorhanden waren
 
-Das ist hilfreich, wenn ihr einen Analysezustand dokumentieren oder spaeter wieder nachvollziehen wollt.
+Das ist hilfreich, wenn ihr einen Analysezustand dokumentieren oder später wieder nachvollziehen wollt.
 
 ## Über die App
 
-Im Bereich `Ueber die App` seht ihr die wichtigsten Informationen zur Anwendung, zur Version und zu den wichtigsten Kurzkuerzeln.
+Im Bereich `Über die App` seht ihr die wichtigsten Informationen zur Anwendung, zur Version und zu den wichtigsten Kürzeln.
 
 ## Tastaturkurzel
 
@@ -106,11 +104,11 @@ Im Bereich `Ueber die App` seht ihr die wichtigsten Informationen zur Anwendung,
 
 Wenn ihr eine Szene mehrfach direkt hintereinander ansehen wollt, aktiviert die Option zur Wiederholung eines einzelnen Segments.
 
-Dann lauft nur die aktuell ausgewaehlte Szene in Schleife. Das ist praktisch, wenn ihr eine strittige Situation mehrfach direkt vergleichen wollt.
+Dann lauft nur die aktuell ausgewählte Szene in Schleife. Das ist praktisch, wenn ihr eine strittige Situation mehrfach direkt vergleichen wollt.
 
 ## Typischer Ablauf im Team
 
-1. Video laden
+1. Video(s) laden
 2. CSV laden
 3. Direkt zu den relevanten Szenen springen
 4. Bei schwierigen Bildern einen passenden Filter oder ein Preset aktivieren

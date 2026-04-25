@@ -7,12 +7,14 @@ export interface DesktopApi {
   prepareStreamingPlayback: (sourcePath: string) => Promise<VideoFileDescriptor>
   getKeyframeTimes: (sourcePath: string) => Promise<number[]>
   pickCsvFile: () => Promise<CsvFileDescriptor | undefined>
+  saveCsvFile: (content: string) => Promise<boolean>
   loadStoredPresets: () => Promise<FilterPreset[]>
   saveStoredPresets: (presets: FilterPreset[]) => Promise<void>
   exportPresets: (presets: FilterPreset[]) => Promise<boolean>
   importPresets: () => Promise<FilterPreset[]>
   getAppInfo: () => Promise<AppInfo>
   exportAppSettings: (settings: AppSettingsExport) => Promise<boolean>
+  importAppSettings: () => Promise<AppSettingsExport | null>
   onVideoPreparationProgress: (listener: (progress: VideoPreparationProgress) => void) => () => void
 }
 

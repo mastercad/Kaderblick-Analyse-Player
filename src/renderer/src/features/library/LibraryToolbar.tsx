@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react'
 import type { CsvFileDescriptor, VideoFileDescriptor } from '../../../../common/types'
 
 interface LibraryToolbarProps {
@@ -10,6 +11,7 @@ interface LibraryToolbarProps {
   onLoadVideos: () => Promise<void>
   onAddVideos: () => Promise<void>
   onSelectVideo: (index: number) => void
+  onReorderVideos?: (reordered: VideoFileDescriptor[]) => void
   onLoadCsv: () => Promise<void>
 }
 
@@ -23,9 +25,40 @@ export function LibraryToolbar({
   onLoadVideos,
   onAddVideos,
   onSelectVideo,
+  onReorderVideos,
   onLoadCsv
 }: LibraryToolbarProps) {
   const activeVideo = videoLibrary[activeVideoIndex]
+  const draggedIndexRef = useRef<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+
+  const handleDragStart = (index: number) => (e: React.DragEvent) => {
+    draggedIndexRef.current = index
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (index: number) => (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (index !== draggedIndexRef.current) setDragOverIndex(index)
+  }
+
+  const handleDrop = (targetIndex: number) => (e: React.DragEvent) => {
+    e.preventDefault()
+    const from = draggedIndexRef.current
+    draggedIndexRef.current = null
+    setDragOverIndex(null)
+    if (from === null || from === targetIndex || !onReorderVideos) return
+    const reordered = [...videoLibrary]
+    const [moved] = reordered.splice(from, 1)
+    reordered.splice(targetIndex, 0, moved)
+    onReorderVideos(reordered)
+  }
+
+  const handleDragEnd = () => {
+    draggedIndexRef.current = null
+    setDragOverIndex(null)
+  }
 
   return (
     <section className={`panel toolbar ${compact ? 'toolbar--compact' : ''}`}>
@@ -65,8 +98,20 @@ export function LibraryToolbar({
               {videoLibrary.map((video, index) => (
                 <li
                   key={video.path}
-                  className={`video-library-item${index === activeVideoIndex ? ' video-library-item--active' : ''}`}
+                  draggable={!!onReorderVideos}
+                  onDragStart={onReorderVideos ? handleDragStart(index) : undefined}
+                  onDragOver={onReorderVideos ? handleDragOver(index) : undefined}
+                  onDrop={onReorderVideos ? handleDrop(index) : undefined}
+                  onDragEnd={onReorderVideos ? handleDragEnd : undefined}
+                  className={[
+                    'video-library-item',
+                    index === activeVideoIndex ? 'video-library-item--active' : '',
+                    dragOverIndex === index ? 'video-library-item--drag-over' : ''
+                  ].filter(Boolean).join(' ')}
                 >
+                  {onReorderVideos && (
+                    <span className="video-library-item__drag-handle" aria-hidden="true">⠿</span>
+                  )}
                   <button
                     type="button"
                     className="video-library-item__button"

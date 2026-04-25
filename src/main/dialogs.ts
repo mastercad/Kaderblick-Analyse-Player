@@ -147,6 +147,24 @@ export const exportPresetsToJson = async (presets: FilterPreset[]): Promise<bool
   return true
 }
 
+export const saveCsvFile = async (content: string, suggestedName = 'segmente.csv'): Promise<boolean> => {
+  const result = await dialog.showSaveDialog(getActiveWindow(), {
+    title: 'Segmente als CSV speichern',
+    defaultPath: suggestedName,
+    filters: [
+      { name: 'CSV', extensions: ['csv'] },
+      { name: 'Alle Dateien', extensions: ['*'] }
+    ]
+  })
+
+  if (result.canceled || !result.filePath) {
+    return false
+  }
+
+  await fs.writeFile(result.filePath, content, 'utf-8')
+  return true
+}
+
 export const importPresetsFromJson = async (): Promise<FilterPreset[]> => {
   const result = await dialog.showOpenDialog(getActiveWindow(), {
     title: 'Presets importieren',
@@ -165,6 +183,31 @@ export const importPresetsFromJson = async (): Promise<FilterPreset[]> => {
 
   const content = await fs.readFile(result.filePaths[0], 'utf-8')
   return normalizeImportedPresets(JSON.parse(content))
+}
+
+export const importAppSettingsFromJson = async (): Promise<AppSettingsExport | null> => {
+  const result = await dialog.showOpenDialog(getActiveWindow(), {
+    title: 'Sitzung importieren',
+    properties: ['openFile'],
+    filters: [{ name: 'JSON', extensions: ['json'] }]
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null
+  }
+
+  const content = await fs.readFile(result.filePaths[0], 'utf-8')
+  const parsed: unknown = JSON.parse(content)
+
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    typeof (parsed as Record<string, unknown>).filterSettings !== 'object'
+  ) {
+    throw new Error('Die Datei enthält keine gültige Sitzungsdatei.')
+  }
+
+  return parsed as AppSettingsExport
 }
 
 export const exportAppSettingsToJson = async (settings: AppSettingsExport): Promise<boolean> => {

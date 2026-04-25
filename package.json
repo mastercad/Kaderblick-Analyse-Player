@@ -45,7 +45,7 @@
       "output": "release"
     },
     "extraMetadata": {
-      "description": "Kaderblick Analyse Player fuer gemeinsame Videoanalyse im Team"
+      "description": "Kaderblick Analyse Player für gemeinsame Videoanalyse im Team"
     },
     "icon": "assets/icon.png",
     "linux": {

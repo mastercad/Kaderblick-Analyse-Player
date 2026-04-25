@@ -28,6 +28,7 @@ pnpm-debug.log*
 tmp/
 temp/
 *.tmp
+*.csv
 *.swp
 *.swo
 *~

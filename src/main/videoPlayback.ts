@@ -385,14 +385,14 @@ const ensurePlaybackProxy = async (
   } catch (error) {
     onProgress?.({
       phase: 'transcoding',
-      message: 'Video wird fuer dieses Geraet optimiert...',
+      message: 'Video wird für dieses Gerät optimiert...',
       percent: 0
     })
 
     await fs.rm(outputPath, { force: true })
     await transcodePlaybackProxy(sourcePath, outputPath, durationSeconds, false, onProgress)
 
-    const metadata = buildOptimizedPlaybackMetadata('Die Originaldatei enthaelt fehlerhafte Audiodaten. Das Video wird deshalb ohne Ton stabil wiedergegeben.')
+    const metadata = buildOptimizedPlaybackMetadata('Die Originaldatei enthält fehlerhafte Audiodaten. Das Video wird deshalb ohne Ton stabil wiedergegeben.')
     await writePlaybackProxyMetadata(outputPath, metadata)
 
     if (error instanceof Error) {

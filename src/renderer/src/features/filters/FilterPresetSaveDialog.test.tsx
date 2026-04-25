@@ -17,7 +17,7 @@ describe('FilterPresetSaveDialog', () => {
       />
     )
 
-    expect(screen.getByRole('button', { name: 'Aktuelles Preset ueberschreiben' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Aktuelles Preset überschreiben' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Als neues Preset speichern' })).toBeInTheDocument()
   })
 

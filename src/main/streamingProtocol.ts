@@ -50,7 +50,13 @@ export const registerStreamingProtocol = (): void => {
         ...(startSeconds > 0 ? ['-ss', String(startSeconds)] : []),
         '-i', filePath,
         '-c:v', needsVideoTranscode ? 'libx264' : 'copy',
-        ...(needsVideoTranscode ? ['-preset', 'ultrafast', '-crf', '22'] : []),
+        // For HEVC: scale 4K down to 1080p so the real-time H.264 encode stays within
+        // CPU budget. Video analysis does not require 4K resolution.
+        ...(needsVideoTranscode ? [
+          '-vf', 'scale=w=1920:h=1080:force_original_aspect_ratio=decrease:flags=fast_bilinear',
+          '-preset', 'ultrafast',
+          '-crf', '22'
+        ] : []),
         '-c:a', 'aac',
         '-b:a', '192k',
         '-movflags', 'frag_keyframe+empty_moov+default_base_moof',

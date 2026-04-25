@@ -36,10 +36,10 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Abhaengigkeiten installieren
+      - name: Abhängigkeiten installieren
         run: npm ci
 
-      - name: Semantic Release ausfuehren
+      - name: Semantic Release ausführen
         id: semantic_release
         uses: cycjimmy/semantic-release-action@v4
         env:

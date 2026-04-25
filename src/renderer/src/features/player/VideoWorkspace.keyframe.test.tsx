@@ -150,18 +150,18 @@ describe('VideoWorkspace – keyframe navigation buttons', () => {
     expect(nextBtn).not.toBeDisabled()
   })
 
-  it('keyframe buttons are disabled for direct-mode (no keyframes fetched)', async () => {
+  it('keyframe buttons are enabled for direct-mode when keyframes are fetched', async () => {
     render(
       <VideoWorkspace {...baseProps} selectedVideo={makeDirectDescriptor()}>
         <div />
       </VideoWorkspace>
     )
 
-    // Flush any effects
+    // Flush effects — getKeyframeTimes now also runs for direct-mode videos
     await act(async () => {})
 
-    expect(screen.getByTitle(/vorherigen Keyframe/)).toBeDisabled()
-    expect(screen.getByTitle(/nächsten Keyframe/)).toBeDisabled()
+    expect(screen.getByTitle(/vorherigen Keyframe/)).not.toBeDisabled()
+    expect(screen.getByTitle(/nächsten Keyframe/)).not.toBeDisabled()
   })
 
   it('next-keyframe button jumps to the next keyframe in stream mode', async () => {

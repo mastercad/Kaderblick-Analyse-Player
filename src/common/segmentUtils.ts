@@ -28,6 +28,49 @@ export const getBaseName = (fullPath: string): string => {
   return parts.at(-1)?.trim() ?? ''
 }
 
+export const parseTimeInput = (input: string): number | null => {
+  const trimmed = input.trim()
+  if (!trimmed) return null
+
+  const parts = trimmed.split(':')
+
+  if (parts.length === 2) {
+    const mStr = parts[0].trim()
+    const sStr = parts[1].trim()
+    if (mStr.includes('.') || mStr.includes(',')) return null
+    const minutes = parseInt(mStr, 10)
+    const seconds = parseFloat(sStr.replace(',', '.'))
+    if (Number.isFinite(minutes) && Number.isFinite(seconds) && minutes >= 0 && seconds >= 0 && seconds < 60) {
+      return minutes * 60 + seconds
+    }
+    return null
+  }
+
+  if (parts.length === 3) {
+    const hStr = parts[0].trim()
+    const mStr = parts[1].trim()
+    const sStr = parts[2].trim()
+    if (hStr.includes('.') || hStr.includes(',') || mStr.includes('.') || mStr.includes(',')) return null
+    const hours = parseInt(hStr, 10)
+    const minutes = parseInt(mStr, 10)
+    const seconds = parseFloat(sStr.replace(',', '.'))
+    if (
+      Number.isFinite(hours) && Number.isFinite(minutes) && Number.isFinite(seconds) &&
+      hours >= 0 && minutes >= 0 && minutes < 60 && seconds >= 0 && seconds < 60
+    ) {
+      return hours * 3600 + minutes * 60 + seconds
+    }
+    return null
+  }
+
+  // Plain number treated as seconds (only when no colons)
+  if (parts.length === 1) {
+    const plain = parseFloat(trimmed.replace(',', '.'))
+    if (Number.isFinite(plain) && plain >= 0) return plain
+  }
+  return null
+}
+
 export const parseSegmentsCsv = (csvText: string): Segment[] => {
   const parsed = Papa.parse<SegmentCsvRow>(csvText, {
     header: true,
@@ -62,7 +105,6 @@ export const parseSegmentsCsv = (csvText: string): Segment[] => {
       } satisfies Segment
     })
     .filter((segment): segment is Segment => Boolean(segment))
-    .sort((left, right) => left.startSeconds - right.startSeconds)
 }
 
 export const matchSegmentsToVideo = (segments: Segment[], videoFileName: string): Segment[] => {
@@ -85,7 +127,7 @@ export const getNextSegmentIndex = (segments: Segment[], currentTimeSeconds: num
   const activeIndex = findActiveSegmentIndex(segments, currentTimeSeconds)
 
   if (activeIndex >= 0) {
-    return activeIndex
+    return activeIndex + 1 < segments.length ? activeIndex + 1 : -1
   }
 
   return segments.findIndex((segment) => segment.startSeconds > currentTimeSeconds)
@@ -99,7 +141,7 @@ export const getPreviousSegmentIndex = (segments: Segment[], currentTimeSeconds:
   }
 
   if (activeIndex === 0) {
-    return 0
+    return -1
   }
 
   const earlierSegments = segments.filter((segment) => segment.startSeconds < currentTimeSeconds)
@@ -118,4 +160,48 @@ export const resolveSegmentSequenceStartIndex = (segments: Segment[], currentTim
 
   const nextIndex = segments.findIndex((segment) => segment.endSeconds > currentTimeSeconds)
   return nextIndex >= 0 ? nextIndex : 0
+}
+
+export const serializeSegmentsToCsv = (segments: Segment[]): string => {
+  const rows = segments.map((s) => ({
+    videoname: s.sourceVideoPath,
+    start_minute: s.startSeconds / 60,
+    length_seconds: s.lengthSeconds,
+    title: s.title,
+    sub_title: s.subTitle,
+    audio: s.audioTrack
+  }))
+  return Papa.unparse(rows, {
+    columns: ['videoname', 'start_minute', 'length_seconds', 'title', 'sub_title', 'audio']
+  })
+}
+
+/**
+ * Returns a new segment array prepared for interstitial display:
+ * - Segments with an empty title inherit the last non-empty title from any preceding segment.
+ * - Segments that still have no title after that step are labelled "Segment N", where N is
+ *   the 1-based position of the segment within this video's segment list.
+ * - When ALL segments of the list lack a title, every segment gets "Segment N".
+ * Use for display purposes only (interstitials) — never pass the result to the editor.
+ */
+export const interpolateSegmentTitles = (segments: Segment[]): Segment[] => {
+  // First pass: fill empty titles from the previous non-empty title (inheritance)
+  let lastTitle = ''
+  const afterInheritance = segments.map((segment) => {
+    if (segment.title) {
+      lastTitle = segment.title
+      return segment
+    }
+    return lastTitle ? { ...segment, title: lastTitle } : segment
+  })
+
+  // Second pass: any segment still without a title gets "Segment N";
+  // any segment without a subTitle also gets "Segment N" (no inheritance — always numbered)
+  return afterInheritance.map((segment, index) => {
+    const title = segment.title || `Segment ${index + 1}`
+    const subTitle = segment.subTitle || `Segment ${index + 1}`
+    return (title !== segment.title || subTitle !== segment.subTitle)
+      ? { ...segment, title, subTitle }
+      : segment
+  })
 }
