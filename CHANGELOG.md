@@ -1,3 +1,20 @@
+# [2.0.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v1.2.0...v2.0.0) (2026-04-25)
+
+
+* feat!: App vollständig überarbeitet mit vereinheitlichtem Handling ([102d2a2](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/102d2a22c15f6b308e484bfe25f8c7decd5a89f3))
+
+
+### BREAKING CHANGES
+
+* Die Anwendung wurde grundlegend neu strukturiert.
+Bestehende Konfigurationen und gespeicherte Zustände sind nicht mehr
+kompatibel und müssen zurückgesetzt werden.
+
+- Grundlegende Technologien implementiert und modernisiert
+- Zahlreiche Bugs behoben
+- Gesamtes Handling vereinheitlicht und konsistent gestaltet
+- UI und Bedienlogik komplett überarbeitet
+
 # [1.1.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v1.0.2...v1.1.0) (2026-03-26)
 
 
