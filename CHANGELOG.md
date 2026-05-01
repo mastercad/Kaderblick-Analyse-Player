@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.0.0...v2.1.0) (2026-05-01)
+
+
+### Features
+
+* make textfield for title in fullscreen autosize ([d8c9394](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/d8c9394f10fe8ea4dc3824b9ec418c142b5e2f25))
+
 # [2.0.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v1.2.0...v2.0.0) (2026-04-25)
 
 
