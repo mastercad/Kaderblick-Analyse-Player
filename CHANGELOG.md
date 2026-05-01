@@ -1,3 +1,10 @@
+## [2.1.2](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.1.1...v2.1.2) (2026-05-01)
+
+
+### Bug Fixes
+
+* load session title from cache after restart, upgrade npm and packages to newest versions ([13a2e47](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/13a2e473b597b2d7929f61182b648bc4daeb5f31))
+
 ## [2.1.1](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.1.0...v2.1.1) (2026-05-01)
 
 
