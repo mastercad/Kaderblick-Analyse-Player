@@ -82,6 +82,14 @@ export function VideoWorkspace({
   const titleRef = useRef<HTMLDivElement | null>(null)
   const titleInternalRef = useRef(sessionTitle ?? '')
 
+  // Initialize contentEditable with the persisted title on mount
+  useEffect(() => {
+    if (titleRef.current && titleInternalRef.current) {
+      titleRef.current.innerText = titleInternalRef.current
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const { isFullscreen, activeFullscreenFlyout, setPinnedFullscreenFlyout,
     toggleFullscreen, toggleFullscreenFlyout,
     handleFullscreenFlyoutMouseEnter, handleFullscreenFlyoutMouseLeave
