@@ -16,6 +16,7 @@ export interface DesktopApi {
   exportAppSettings: (settings: AppSettingsExport) => Promise<boolean>
   importAppSettings: () => Promise<AppSettingsExport | null>
   onVideoPreparationProgress: (listener: (progress: VideoPreparationProgress) => void) => () => void
+  fileExists: (filePath: string) => Promise<boolean>
 }
 
 declare global {

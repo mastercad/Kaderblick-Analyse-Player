@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, ipcMain, protocol } from 'electron'
@@ -84,6 +85,7 @@ app.whenReady().then(() => {
   }))
   ipcMain.handle('app:settings:export', (_, settings: AppSettingsExport) => exportAppSettingsToJson(settings))
   ipcMain.handle('app:settings:import', () => importAppSettingsFromJson())
+  ipcMain.handle('fs:fileExists', (_, filePath: string) => existsSync(filePath))
 
   createWindow()
 

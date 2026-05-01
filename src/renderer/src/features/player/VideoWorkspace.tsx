@@ -79,6 +79,8 @@ export function VideoWorkspace({
   const videoStageViewportRef = useRef<HTMLDivElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const isInterstitialActiveRef = useRef(false)
+  const titleRef = useRef<HTMLDivElement | null>(null)
+  const titleInternalRef = useRef(sessionTitle ?? '')
 
   const { isFullscreen, activeFullscreenFlyout, setPinnedFullscreenFlyout,
     toggleFullscreen, toggleFullscreenFlyout,
@@ -141,7 +143,8 @@ export function VideoWorkspace({
       !isRangeInput && (
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
       )
     if (isTyping) return
     // Arrow keys on range inputs control the slider — don't intercept them
@@ -599,14 +602,28 @@ export function VideoWorkspace({
                     </div>
                     <div className="brand-mark__player">ANALYSE PLAYER</div>
                   </div>
-                  <input
+                  <div
+                    ref={titleRef}
                     className="video-splash__title"
-                    type="text"
-                    value={sessionTitle}
-                    onChange={(e) => onSessionTitleChange(e.target.value)}
-                    placeholder="Sitzungsname (z.B. Videoanalyse 24.04.2026)"
+                    contentEditable
+                    suppressContentEditableWarning
+                    spellCheck={false}
+                    role="textbox"
+                    aria-multiline="true"
                     aria-label="Sitzungsname"
+                    data-placeholder="Sitzungsname (z.B. Videoanalyse 24.04.2026)"
                     tabIndex={(!isFullscreen || fullscreenStarted) ? -1 : 0}
+                    onInput={(e) => {
+                      const text = e.currentTarget.innerText
+                      titleInternalRef.current = text
+                      onSessionTitleChange(text)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const lines = e.currentTarget.innerText.split('\n')
+                        if (lines.length >= 2) e.preventDefault()
+                      }
+                    }}
                   />
                   <p className="video-splash__hint">Leertaste oder Play zum Starten</p>
                 </div>

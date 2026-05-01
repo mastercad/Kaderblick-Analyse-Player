@@ -777,10 +777,20 @@ export function App() {
                     return
                   }
 
-                  // Show confirmation dialog — never transcode silently
-                  isRecoveringPlaybackRef.current = true
-                  setIsRecoveringPlayback(true)
-                  setStreamingConfirmFor({ video: selectedVideo, index: activeVideoIndex })
+                  // Before showing the codec dialog, verify the file actually exists.
+                  // A missing file also triggers MEDIA_ERR_SRC_NOT_SUPPORTED in Chromium,
+                  // which would otherwise be misidentified as a codec problem.
+                  void window.desktopApi.fileExists(selectedVideo.path).then((exists) => {
+                    if (!exists) {
+                      setStatusMessage(`Datei nicht gefunden: ${selectedVideo.fileName}`)
+                      return
+                    }
+
+                    // Show confirmation dialog — never transcode silently
+                    isRecoveringPlaybackRef.current = true
+                    setIsRecoveringPlayback(true)
+                    setStreamingConfirmFor({ video: selectedVideo, index: activeVideoIndex })
+                  })
                 }}
                 overlayDialogs={(
                   <>

@@ -1307,8 +1307,12 @@ select {
 }
 
 .video-splash__title {
-  width: min(420px, 80%);
-  padding: 6px 0;
+  display: inline-block;
+  min-width: 12em;
+  max-width: min(80vw, 640px);
+  max-height: calc(1.5em * 2 + 12px);
+  overflow: hidden;
+  padding: 6px 4px;
   background: transparent;
   border: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.22);
@@ -1318,16 +1322,22 @@ select {
   text-align: center;
   outline: none;
   transition: border-color 0.2s ease, color 0.2s ease;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  cursor: text;
+}
+
+.video-splash__title:empty::before {
+  content: attr(data-placeholder);
+  color: rgba(255, 255, 255, 0.28);
+  font-style: italic;
+  pointer-events: none;
 }
 
 .video-splash__title:focus {
   border-bottom-color: #12c637;
   color: rgba(255, 255, 255, 0.95);
-}
-
-.video-splash__title::placeholder {
-  color: rgba(255, 255, 255, 0.28);
-  font-style: italic;
 }
 
 .video-splash__hint {

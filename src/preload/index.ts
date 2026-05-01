@@ -17,6 +17,7 @@ const desktopApi: DesktopApi = {
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   exportAppSettings: (settings: AppSettingsExport) => ipcRenderer.invoke('app:settings:export', settings),
   importAppSettings: () => ipcRenderer.invoke('app:settings:import'),
+  fileExists: (filePath: string) => ipcRenderer.invoke('fs:fileExists', filePath),
   onVideoPreparationProgress: (listener) => {
     const handleProgress = (_event: Electron.IpcRendererEvent, progress: VideoPreparationProgress): void => {
       listener(progress)
