@@ -50,7 +50,17 @@ describe('useFullscreen – isFullscreen', () => {
     expect(hook.result.current.isFullscreen).toBe(true)
   })
 
-  it('remains false when fullscreenchange fires for a different element', () => {
+  it('becomes true when fullscreenchange fires with a DESCENDANT of the panel as fullscreenElement', () => {
+    // Simulates the YouTube iframe calling requestFullscreen() which makes
+    // document.fullscreenElement point to the iframe (a child of the panel).
+    const { hook, panelEl } = setup()
+    const childEl = document.createElement('div')
+    panelEl.appendChild(childEl)
+    enterFullscreen(childEl)
+    expect(hook.result.current.isFullscreen).toBe(true)
+  })
+
+  it('remains false when fullscreenchange fires for an unrelated element', () => {
     const { hook } = setup()
     const otherEl = document.createElement('div')
     enterFullscreen(otherEl)

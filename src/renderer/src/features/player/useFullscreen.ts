@@ -15,7 +15,14 @@ export function useFullscreen({ playerPanelRef }: UseFullscreenOptions) {
 
   useEffect(() => {
     const handleFullscreenChange = (): void => {
-      setIsFullscreen(document.fullscreenElement === playerPanelRef.current)
+      const el = document.fullscreenElement
+      // Also treat a descendant going fullscreen (e.g. an embedded iframe requesting
+      // its own fullscreen) as "we are still in fullscreen" so the panel keeps its
+      // fullscreen layout and controls remain accessible.
+      setIsFullscreen(
+        el === playerPanelRef.current ||
+        (el !== null && playerPanelRef.current?.contains(el) === true)
+      )
     }
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)

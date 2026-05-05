@@ -1224,6 +1224,30 @@ select {
   cursor: grabbing;
 }
 
+.online-video-player {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.online-video-player__event-capture {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.online-video-player__container {
+  width: 100%;
+  height: 100%;
+}
+
+.online-video-player__container iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .video-stage__video {
   display: block;
   width: 100%;

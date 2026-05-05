@@ -41,12 +41,14 @@ export interface VideoFileDescriptor {
   path: string
   fileName: string
   fileUrl: string
-  playbackMode: 'direct' | 'proxy' | 'stream'
+  playbackMode: 'direct' | 'proxy' | 'stream' | 'online'
   sourceCodec?: string
   durationSeconds?: number
   playbackPath?: string
   playbackLabel?: string
   playbackHint?: string
+  onlinePlatform?: 'youtube' | 'vimeo'
+  onlineVideoId?: string
 }
 
 export interface VideoPreparationProgress {

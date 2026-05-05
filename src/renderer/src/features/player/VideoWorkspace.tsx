@@ -8,6 +8,8 @@ import { SegmentList } from './SegmentList'
 import { SegmentTimeline } from './SegmentTimeline'
 import { useFullscreen } from './useFullscreen'
 import { useVideoPlayback } from './useVideoPlayback'
+import { useOnlineVideoPlayback } from './useOnlineVideoPlayback'
+import { OnlineVideoPlayer } from './OnlineVideoPlayer'
 import { useZoom } from './useZoom'
 import { formatRate } from './playerUtils'
 import { MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL, PLAYBACK_RATES, SEEK_STEP_SECONDS, ZOOM_STEP } from './playerTypes'
@@ -78,6 +80,7 @@ export function VideoWorkspace({
   const playerPanelRef = useRef<HTMLElement | null>(null)
   const videoStageViewportRef = useRef<HTMLDivElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const onlinePlayerContainerRef = useRef<HTMLDivElement | null>(null)
   const isInterstitialActiveRef = useRef(false)
   const titleRef = useRef<HTMLDivElement | null>(null)
   const titleInternalRef = useRef(sessionTitle ?? '')
@@ -97,7 +100,9 @@ export function VideoWorkspace({
 
   const zoom = useZoom({ videoStageViewportRef, videoRef, selectedVideo, isFullscreen, isInterstitialActiveRef })
 
-  const playback = useVideoPlayback({
+  const isOnlineVideo = selectedVideo?.playbackMode === 'online'
+
+  const localPlayback = useVideoPlayback({
     videoRef,
     selectedVideo,
     segments,
@@ -116,6 +121,26 @@ export function VideoWorkspace({
     onVideoEnded,
     onSegmentModeChange
   })
+
+  const onlinePlayback = useOnlineVideoPlayback({
+    containerRef: onlinePlayerContainerRef,
+    selectedVideo,
+    segments,
+    repeatSingleSegment,
+    interstitialDuration,
+    autoPlayOnLoad,
+    autoStartSegmentsOnLoad,
+    autoStartSegmentsFromEnd,
+    onCurrentTimeChange,
+    onVideoLoaded,
+    onVideoError,
+    onAllSegmentsDone,
+    onFirstSegmentReached,
+    onVideoEnded,
+    onSegmentModeChange
+  })
+
+  const playback = isOnlineVideo ? onlinePlayback : localPlayback
 
   // useLayoutEffect: runs synchronously after every commit, before any browser events.
   // This guarantees isPlayingRef in App.tsx is always up-to-date before the next user interaction.
@@ -573,7 +598,8 @@ export function VideoWorkspace({
                     top: `${zoom.fittedVideoRect.top}px`,
                     width: `${zoom.fittedVideoRect.width}px`,
                     height: `${zoom.fittedVideoRect.height}px`,
-                    transform: `translate(${zoom.zoomOffset.x}px, ${zoom.zoomOffset.y}px)`
+                    transform: `translate(${zoom.zoomOffset.x}px, ${zoom.zoomOffset.y}px)`,
+                    ...(isOnlineVideo ? { filter: buildCssFilter(filterSettings) } : {})
                   }}
                 >
                   <div
@@ -581,23 +607,30 @@ export function VideoWorkspace({
                     data-testid="video-zoom-content"
                     style={{ transform: `scale(${zoom.zoomLevel})` }}
                   >
-                    <video
-                      key={selectedVideo.fileUrl}
-                      className={`video-stage__video ${zoom.isZoomed ? 'video-stage__video--zoomed' : ''}`}
-                      controls={false}
-                      preload="auto"
-                      ref={videoRef}
-                      src={playback.streamUrl ?? selectedVideo.fileUrl}
-                      style={{ filter: buildCssFilter(filterSettings) }}
-                      onCanPlay={playback.handleCanPlay}
-                      onLoadedMetadata={playback.handleMetadataLoaded}
-                      onError={playback.handleVideoError}
-                      onTimeUpdate={playback.handleTimeUpdate}
-                      onSeeked={playback.handleSeeked}
-                      onPause={() => {}}
-                      onPlay={() => {}}
-                      onEnded={playback.handleVideoEnded}
-                    />
+                    {isOnlineVideo ? (
+                      <OnlineVideoPlayer
+                        containerRef={onlinePlayerContainerRef}
+                        selectedVideo={selectedVideo}
+                      />
+                    ) : (
+                      <video
+                        key={selectedVideo.fileUrl}
+                        className={`video-stage__video ${zoom.isZoomed ? 'video-stage__video--zoomed' : ''}`}
+                        controls={false}
+                        preload="auto"
+                        ref={videoRef}
+                        src={playback.streamUrl ?? selectedVideo.fileUrl}
+                        style={{ filter: buildCssFilter(filterSettings) }}
+                        onCanPlay={playback.handleCanPlay}
+                        onLoadedMetadata={playback.handleMetadataLoaded}
+                        onError={playback.handleVideoError}
+                        onTimeUpdate={playback.handleTimeUpdate}
+                        onSeeked={playback.handleSeeked}
+                        onPause={() => {}}
+                        onPlay={() => {}}
+                        onEnded={playback.handleVideoEnded}
+                      />
+                    )}
                   </div>
                 </div>
 

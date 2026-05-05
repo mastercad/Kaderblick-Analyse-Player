@@ -13,6 +13,7 @@ import { FilterOverlay } from '../features/filters/FilterOverlay'
 import { FilterPresetSaveDialog } from '../features/filters/FilterPresetSaveDialog'
 import { CodecStreamingDialog } from '../features/player/CodecStreamingDialog'
 import { SegmentEditor } from '../features/player/SegmentEditor'
+import { AddOnlineVideoDialog } from '../features/library/AddOnlineVideoDialog'
 import { LibraryToolbar } from '../features/library/LibraryToolbar'
 import { VideoWorkspace } from '../features/player/VideoWorkspace'
 import appLogo from '../../../../assets/icon.png'
@@ -88,6 +89,7 @@ export function App() {
     typeof window !== 'undefined' ? (window.localStorage.getItem(sessionTitleStorageKey) ?? '') : ''
   )
   const isRecoveringPlaybackRef = useRef(false)
+  const [addOnlineVideoDialogOpen, setAddOnlineVideoDialogOpen] = useState(false)
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
   const headerMenuRef = useRef<HTMLDivElement>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
@@ -696,6 +698,7 @@ export function App() {
           totalSegmentCount={allSegments.length}
           onLoadVideos={handleLoadVideos}
           onAddVideos={handleAddVideos}
+          onAddOnlineVideo={() => setAddOnlineVideoDialogOpen(true)}
           onSelectVideo={handleSelectVideo}
           onReorderVideos={(reordered) => {
             const currentVideo = videoLibrary[activeVideoIndex]
@@ -878,6 +881,17 @@ export function App() {
       </div>
 
       {showStartScreen ? <AboutDialog appInfo={appInfo} open={aboutDialogVisible} onClose={() => setAboutDialogVisible(false)} /> : null}
+      <AddOnlineVideoDialog
+        open={addOnlineVideoDialogOpen}
+        existingPaths={new Set(videoLibrary.map((v) => v.path))}
+        onAdd={(video) => {
+          setVideoLibrary((prev) => [...prev, video])
+          setActiveVideoIndex(videoLibrary.length)
+          setSessionRestorePrompt(null)
+          setStatusMessage(`Online-Video „${video.fileName}" hinzugefügt.`)
+        }}
+        onClose={() => setAddOnlineVideoDialogOpen(false)}
+      />
       <input
         ref={logoInputRef}
         type="file"

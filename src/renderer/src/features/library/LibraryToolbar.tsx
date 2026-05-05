@@ -10,6 +10,7 @@ interface LibraryToolbarProps {
   totalSegmentCount: number
   onLoadVideos: () => Promise<void>
   onAddVideos: () => Promise<void>
+  onAddOnlineVideo: () => void
   onSelectVideo: (index: number) => void
   onReorderVideos?: (reordered: VideoFileDescriptor[]) => void
   onLoadCsv: () => Promise<void>
@@ -24,6 +25,7 @@ export function LibraryToolbar({
   totalSegmentCount,
   onLoadVideos,
   onAddVideos,
+  onAddOnlineVideo,
   onSelectVideo,
   onReorderVideos,
   onLoadCsv
@@ -78,6 +80,9 @@ export function LibraryToolbar({
               Video hinzufügen
             </button>
           )}
+          <button className="button" type="button" onClick={onAddOnlineVideo} title="YouTube- oder Vimeo-Link hinzufügen">
+            Online-Video
+          </button>
           <button className="button" type="button" onClick={() => void onLoadCsv()}>
             CSV laden
           </button>
@@ -122,6 +127,15 @@ export function LibraryToolbar({
                     {video.playbackMode === 'proxy' && (
                       <span className="playback-badge" title={video.playbackHint ?? 'Optimierte Wiedergabe'}>
                         <span className="playback-badge__dot" aria-hidden="true" />
+                      </span>
+                    )}
+                    {video.playbackMode === 'online' && (
+                      <span className="playback-badge" title={`Online-Video (${video.onlinePlatform ?? 'extern'})`}>
+                        <svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline', verticalAlign: 'middle' }}>
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                          <polyline points="15 3 21 3 21 9" />
+                          <line x1="10" y1="14" x2="21" y2="3" />
+                        </svg>
                       </span>
                     )}
                   </button>
