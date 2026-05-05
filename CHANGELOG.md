@@ -1,3 +1,10 @@
+# [2.2.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.1.2...v2.2.0) (2026-05-05)
+
+
+### Features
+
+* implement option to add online video links and handle it for segmentation like normal video file ([daa183f](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/daa183f388fd4c21e9707769f9a7bd050dace8f1))
+
 ## [2.1.2](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.1.1...v2.1.2) (2026-05-01)
 
 
