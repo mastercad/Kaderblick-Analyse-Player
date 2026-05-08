@@ -1,3 +1,10 @@
+# [2.3.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.2.0...v2.3.0) (2026-05-08)
+
+
+### Features
+
+* implement new corporate design icon ([41b362e](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/41b362e727d571bc171114c66a235809c0e33702))
+
 # [2.2.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.1.2...v2.2.0) (2026-05-05)
 
 
