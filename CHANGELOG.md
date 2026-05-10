@@ -1,3 +1,10 @@
+## [2.3.1](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.3.0...v2.3.1) (2026-05-10)
+
+
+### Bug Fixes
+
+* fix missing icon in app bar in os. ([a853ddd](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/a853ddd545b9132a5ab9f959aaa2f86868b2e896))
+
 # [2.3.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.2.0...v2.3.0) (2026-05-08)
 
 
