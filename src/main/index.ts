@@ -27,7 +27,7 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
 const createWindow = (): void => {
   const mainWindow = new BrowserWindow({
     title: 'Kaderblick Analyse Player',
-    icon: path.join(currentDirectory, '../../assets/icon.png'),
+    icon: path.join(currentDirectory, '../../assets/kaderblick_analyse_player_appicon.svg'),
     width: 1480,
     height: 980,
     minWidth: 1180,

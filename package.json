@@ -1,6 +1,6 @@
 {
   "name": "kaderblick-analyse-player",
-  "version": "2.3.0",
+  "version": "3.3.0",
   "description": "Desktop player for football video analysis with CSV segments, live filters and team-friendly controls.",
   "main": "out/main/index.js",
   "author": {
@@ -47,14 +47,14 @@
     "extraMetadata": {
       "description": "Kaderblick Analyse Player für gemeinsame Videoanalyse im Team"
     },
-    "icon": "assets/icon.png",
+    "icon": "assets/kaderblick_analyse_player_appicon.svg",
     "linux": {
       "target": [
         "AppImage",
         "deb"
       ],
       "category": "AudioVideo",
-      "icon": "assets/icon.png",
+      "icon": "assets/kaderblick_analyse_player_appicon.svg",
       "desktop": {
         "entry": {
           "Name": "Kaderblick Analyse Player",
@@ -68,7 +68,7 @@
         "dmg",
         "zip"
       ],
-      "icon": "assets/icon.icns",
+      "icon": "assets/kaderblick_player_appicon.icns",
       "identity": null
     },
     "win": {
@@ -76,7 +76,7 @@
         "nsis",
         "portable"
       ],
-      "icon": "assets/icon.ico",
+      "icon": "assets/kaderblick_player_appicon.ico",
       "legalTrademarks": "Kaderblick Analyse Player"
     },
     "portable": {
@@ -88,9 +88,9 @@
       "allowToChangeInstallationDirectory": true,
       "shortcutName": "Kaderblick Analyse Player",
       "uninstallDisplayName": "Kaderblick Analyse Player",
-      "installerIcon": "assets/icon.ico",
-      "uninstallerIcon": "assets/icon.ico",
-      "installerHeaderIcon": "assets/icon.ico",
+      "installerIcon": "assets/kaderblick_player_appicon.ico",
+      "uninstallerIcon": "assets/kaderblick_player_appicon.ico",
+      "installerHeaderIcon": "assets/kaderblick_player_appicon.ico",
       "artifactName": "${productName}-${version}-setup-${arch}.${ext}"
     }
   },

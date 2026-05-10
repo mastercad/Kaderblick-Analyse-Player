@@ -16,7 +16,8 @@ import { SegmentEditor } from '../features/player/SegmentEditor'
 import { AddOnlineVideoDialog } from '../features/library/AddOnlineVideoDialog'
 import { LibraryToolbar } from '../features/library/LibraryToolbar'
 import { VideoWorkspace } from '../features/player/VideoWorkspace'
-import appLogo from '../../../../assets/icon.png'
+import appLogo from '../../../../assets/kaderblick_analyse_player_appicon.svg'
+import appLogoWithTitle from '../../../../assets/kaderblick_analyse_player_with_title_justify_invert.svg'
 
 const defaultPresetId = builtInFilterPresets[0].id
 const themeStorageKey = 'kaderblick-theme-mode'
@@ -572,14 +573,7 @@ export function App() {
         <div className="shell__header-inner">
           <div className="brand-lockup">
             <div className="brand-mark">
-              <img alt="Kaderblick Logo" className="brand-mark__logo" src={appLogo} />
-              <div className="brand-mark__copy">
-                <span className="brand-mark__word" aria-label="Kaderblick">
-                  <span className="brand-mark__initial">K</span>
-                  <span className="brand-mark__rest">ADERBLICK</span>
-                </span>
-                <span className="brand-mark__player">ANALYSE PLAYER</span>
-              </div>
+              <img alt="Kaderblick Analyse Player" className="brand-mark__logo" src={appLogoWithTitle} />
             </div>
             <div className="brand-copy">
               <p className="shell__eyebrow">Für Trainer &amp; Analysten</p>
