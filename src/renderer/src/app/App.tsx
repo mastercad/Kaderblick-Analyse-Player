@@ -16,7 +16,6 @@ import { SegmentEditor } from '../features/player/SegmentEditor'
 import { AddOnlineVideoDialog } from '../features/library/AddOnlineVideoDialog'
 import { LibraryToolbar } from '../features/library/LibraryToolbar'
 import { VideoWorkspace } from '../features/player/VideoWorkspace'
-import appLogo from '../../../../assets/kaderblick_analyse_player_appicon.svg'
 import appLogoWithTitle from '../../../../assets/kaderblick_analyse_player_with_title_justify_invert.svg'
 
 const defaultPresetId = builtInFilterPresets[0].id

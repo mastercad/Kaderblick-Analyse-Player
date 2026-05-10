@@ -24,10 +24,20 @@ protocol.registerSchemesAsPrivileged([{
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
 
+function resolveAppIcon(): string {
+  const base = path.join(currentDirectory, '../../assets')
+  if (process.platform === 'win32') return path.join(base, 'kaderblick_player_appicon.ico')
+  if (process.platform === 'darwin') return path.join(base, 'kaderblick_player_appicon.icns')
+  // Linux: Electron requires PNG — use kaderblick_analyse_player_appicon.png when available
+  const png = path.join(base, 'kaderblick_analyse_player_appicon.png')
+  if (existsSync(png)) return png
+  return path.join(base, 'icon.png')
+}
+
 const createWindow = (): void => {
   const mainWindow = new BrowserWindow({
     title: 'Kaderblick Analyse Player',
-    icon: path.join(currentDirectory, '../../assets/kaderblick_analyse_player_appicon.svg'),
+    icon: resolveAppIcon(),
     width: 1480,
     height: 980,
     minWidth: 1180,
