@@ -208,6 +208,30 @@ describe('VideoWorkspace – speed controls', () => {
     vi.useRealTimers()
   })
 
+  it('keeps reverse playback synchronized to elapsed time while the decoder is seeking', () => {
+    vi.useFakeTimers()
+    render(
+      <VideoWorkspace {...baseProps} selectedVideo={directVideo}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video') as HTMLVideoElement
+    let seeking = false
+    Object.defineProperty(video, 'seeking', { configurable: true, get: () => seeking })
+    video.currentTime = 10
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Rückwärts' })) })
+    seeking = true
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(video.currentTime).toBeCloseTo(10)
+
+    seeking = false
+    act(() => { vi.advanceTimersByTime(16) })
+    expect(video.currentTime).toBeLessThanOrEqual(9)
+    expect(video.currentTime).toBeGreaterThanOrEqual(8.9)
+    vi.useRealTimers()
+  })
+
   it('toggles reverse playback with Shift+R', () => {
     render(
       <VideoWorkspace {...baseProps} selectedVideo={directVideo}>

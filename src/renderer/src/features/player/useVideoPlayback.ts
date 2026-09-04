@@ -95,8 +95,9 @@ export function useVideoPlayback({
   const scrubWasPlayingRef = useRef(false)
   const scrubPendingTimeRef = useRef<number | null>(null)
   const scrubIsSeekingRef = useRef(false)
-  const reverseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const reverseLastTickRef = useRef(0)
+  const reverseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reverseStartedAtRef = useRef(0)
+  const reverseStartedTimeRef = useRef(0)
   const reverseTargetTimeRef = useRef(0)
   const reversePlaybackRateRef = useRef(1)
   const isReversingRef = useRef(false)
@@ -133,7 +134,7 @@ export function useVideoPlayback({
     setIsReversing(false)
     isReversingRef.current = false
     if (reverseTimerRef.current !== null) {
-      clearInterval(reverseTimerRef.current)
+      clearTimeout(reverseTimerRef.current)
       reverseTimerRef.current = null
     }
     setInterstitialSegment(null)
@@ -156,7 +157,7 @@ export function useVideoPlayback({
   useEffect(() => {
     return () => {
       if (interstitialTimerRef.current !== null) clearTimeout(interstitialTimerRef.current)
-      if (reverseTimerRef.current !== null) clearInterval(reverseTimerRef.current)
+      if (reverseTimerRef.current !== null) clearTimeout(reverseTimerRef.current)
     }
   }, [])
 
@@ -224,7 +225,7 @@ export function useVideoPlayback({
 
   const stopReversePlayback = (): void => {
     if (reverseTimerRef.current !== null) {
-      clearInterval(reverseTimerRef.current)
+      clearTimeout(reverseTimerRef.current)
       reverseTimerRef.current = null
     }
     isReversingRef.current = false
@@ -510,6 +511,13 @@ export function useVideoPlayback({
 
   const changePlaybackRate = (rate: number): void => {
     if (!videoRef.current) return
+    if (isReversingRef.current) {
+      const elapsedSeconds = Math.max(0, performance.now() - reverseStartedAtRef.current) / 1000
+      const currentTarget = Math.max(0, reverseStartedTimeRef.current - elapsedSeconds * reversePlaybackRateRef.current)
+      reverseStartedTimeRef.current = currentTarget
+      reverseStartedAtRef.current = performance.now()
+      reverseTargetTimeRef.current = currentTarget
+    }
     videoRef.current.playbackRate = rate
     setPlaybackRate(rate)
     reversePlaybackRateRef.current = rate
@@ -522,6 +530,25 @@ export function useVideoPlayback({
     } else if (direction === 'slower' && currentIndex > 0) {
       changePlaybackRate(PLAYBACK_RATES[currentIndex - 1])
     }
+  }
+
+  const updateReversePlayback = (): void => {
+    if (!videoRef.current || !isReversingRef.current) return
+    const elapsedSeconds = Math.max(0, performance.now() - reverseStartedAtRef.current) / 1000
+    const nextTime = Math.max(0, reverseStartedTimeRef.current - elapsedSeconds * reversePlaybackRateRef.current)
+    reverseTargetTimeRef.current = nextTime
+    if (!videoRef.current.seeking) videoRef.current.currentTime = nextTime
+    setCurrentTime(nextTime)
+    onCurrentTimeChange?.(nextTime)
+    setActiveSegmentIndex(findActiveSegmentIndex(segments, nextTime))
+
+    if (nextTime === 0) {
+      stopReversePlayback()
+      setIsPlaying(false)
+      return
+    }
+
+    reverseTimerRef.current = setTimeout(updateReversePlayback, 16)
   }
 
   const toggleReversePlayback = (): string | null => {
@@ -544,25 +571,10 @@ export function useVideoPlayback({
     setIsReversing(true)
     setIsPlaying(true)
     setHasEverPlayed(true)
-    reverseLastTickRef.current = performance.now()
+    reverseStartedAtRef.current = performance.now()
+    reverseStartedTimeRef.current = startTime
     reverseTargetTimeRef.current = startTime
-    reverseTimerRef.current = setInterval(() => {
-      if (!videoRef.current || !isReversingRef.current) return
-      const now = performance.now()
-      const elapsedSeconds = Math.min(0.2, Math.max(0, now - reverseLastTickRef.current) / 1000)
-      reverseLastTickRef.current = now
-      const nextTime = Math.max(0, reverseTargetTimeRef.current - elapsedSeconds * reversePlaybackRateRef.current)
-      reverseTargetTimeRef.current = nextTime
-      // Do not queue another decoder seek while the previous frame is still loading.
-      if (!videoRef.current.seeking) videoRef.current.currentTime = nextTime
-      setCurrentTime(nextTime)
-      onCurrentTimeChange?.(nextTime)
-      setActiveSegmentIndex(findActiveSegmentIndex(segments, nextTime))
-      if (nextTime === 0) {
-        stopReversePlayback()
-        setIsPlaying(false)
-      }
-    }, 40)
+    updateReversePlayback()
     return null
   }
 

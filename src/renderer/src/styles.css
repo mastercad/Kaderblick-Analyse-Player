@@ -23,6 +23,11 @@
   color-scheme: light;
   --header-ink: #ffffff;
   --header-muted: rgba(255, 255, 255, 0.78);
+  --header-control: rgba(255, 255, 255, 0.76);
+  --header-control-strong: rgba(255, 255, 255, 0.92);
+  --header-control-ink: rgba(24, 20, 20, 0.86);
+  --header-control-muted: rgba(24, 20, 20, 0.6);
+  --header-control-track: rgba(24, 20, 20, 0.16);
   --page-bg-top: #faf7f7;
   --page-bg-bottom: #f2eced;
   --page-glow-left: rgba(200, 58, 58, 0.10);
@@ -61,6 +66,13 @@
   color-scheme: dark;
   --header-ink: #ffffff;
   --header-muted: rgba(255, 255, 255, 0.78);
+  --header-surface: rgba(8, 7, 7, 0.32);
+  --header-surface-border: rgba(255, 255, 255, 0.12);
+  --header-control: rgba(25, 23, 23, 0.9);
+  --header-control-strong: rgba(31, 28, 28, 0.96);
+  --header-control-ink: #f7f5f5;
+  --header-control-muted: #ada6a6;
+  --header-control-track: rgba(255, 255, 255, 0.18);
   --page-bg-top: #161414;
   --page-bg-bottom: #121010;
   --page-glow-left: rgba(200, 58, 58, 0.10);
@@ -352,8 +364,8 @@ select {
   padding: 10px 14px;
   border: 1px solid var(--header-surface-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.76);
-  color: rgba(7, 17, 6, 0.82);
+  background: var(--header-control);
+  color: var(--header-control-ink);
   box-shadow: var(--shadow-soft);
 }
 
@@ -362,7 +374,7 @@ select {
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(7, 17, 6, 0.56);
+  color: var(--header-control-muted);
 }
 
 .theme-toggle__value {
@@ -374,7 +386,7 @@ select {
   width: 34px;
   height: 20px;
   border-radius: 999px;
-  background: rgba(7, 17, 6, 0.16);
+  background: var(--header-control-track);
 }
 
 .theme-toggle__indicator::after {
@@ -697,8 +709,8 @@ select {
 
 .button--header {
   border-color: var(--header-surface-border);
-  background: rgba(255, 255, 255, 0.7);
-  color: rgba(7, 17, 6, 0.82);
+  background: var(--header-control);
+  color: var(--header-control-ink);
 }
 
 /* Header dropdown menu */
@@ -723,17 +735,12 @@ select {
   padding: 6px;
   border: 1px solid var(--header-surface-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--header-control-strong);
   backdrop-filter: blur(18px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-
-[data-theme='dark'] .header-menu__dropdown {
-  background: rgba(28, 36, 28, 0.94);
-  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .header-menu__item {
@@ -778,11 +785,7 @@ select {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(7, 17, 6, 0.42);
-}
-
-[data-theme='dark'] .header-menu__group-label {
-  color: rgba(255, 255, 255, 0.38);
+  color: var(--header-control-muted);
 }
 
 .header-menu__item--muted {
@@ -798,12 +801,8 @@ select {
 
 .header-menu__duration-label {
   font-size: 0.82rem;
-  color: rgba(7, 17, 6, 0.56);
+  color: var(--header-control-muted);
   white-space: nowrap;
-}
-
-[data-theme='dark'] .header-menu__duration-label {
-  color: rgba(255, 255, 255, 0.5);
 }
 
 .header-menu__duration-btns {
@@ -1276,6 +1275,80 @@ select {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+}
+
+.fullscreen-keyboard-hud {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(64px, 10vh, 112px);
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 154px;
+  max-width: min(360px, calc(100% - 64px));
+  padding: 10px 15px 10px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 14px;
+  background: rgba(9, 10, 9, 0.7);
+  color: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(14px) saturate(120%);
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: fullscreen-keyboard-hud-life 1.5s ease-out forwards;
+}
+
+.fullscreen-keyboard-hud__icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.fullscreen-keyboard-hud__copy {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
+}
+
+.fullscreen-keyboard-hud__label {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fullscreen-keyboard-hud__copy strong {
+  color: #fff;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@keyframes fullscreen-keyboard-hud-life {
+  0% { opacity: 0; transform: translate(-50%, 5px) scale(0.98); }
+  10%, 68% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -3px) scale(0.99); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fullscreen-keyboard-hud {
+    animation-timing-function: linear;
+  }
 }
 
 .video-splash__logo {
@@ -2017,8 +2090,8 @@ kbd {
   padding: 14px 16px;
   border: 1px solid var(--header-surface-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.72);
-  color: rgba(7, 17, 6, 0.8);
+  background: var(--header-control);
+  color: var(--header-control-ink);
   box-shadow: var(--shadow-soft);
 }
 
@@ -2027,14 +2100,14 @@ kbd {
 }
 
 .status-progress-card span {
-  color: rgba(7, 17, 6, 0.68);
+  color: var(--header-control-muted);
 }
 
 .status-progress-bar {
   overflow: hidden;
   height: 8px;
   border-radius: 999px;
-  background: rgba(7, 17, 6, 0.12);
+  background: var(--header-control-track);
 }
 
 .status-progress-bar__fill {
@@ -2395,6 +2468,13 @@ kbd {
   background: rgba(7, 12, 7, 0.74);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34);
   backdrop-filter: blur(18px);
+}
+
+/* The shortcut menu lives in the top flyout in fullscreen. Opening it below the
+   trigger keeps the complete menu inside the video viewport. */
+.fullscreen-flyout-panel--top .shortcut-list__grid {
+  top: calc(100% + 8px);
+  bottom: auto;
 }
 
 .fullscreen-card--stacked {

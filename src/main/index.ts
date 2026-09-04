@@ -55,6 +55,11 @@ const createWindow = (): void => {
     }
   })
 
+  // On Windows Electron's default application menu reserves F11 for toggling
+  // the BrowserWindow fullscreen state. The renderer uses F11 for fullscreening
+  // only the video panel, so remove the hidden native menu and its accelerator.
+  mainWindow.setMenu(null)
+
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
   })
@@ -111,4 +116,3 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
-

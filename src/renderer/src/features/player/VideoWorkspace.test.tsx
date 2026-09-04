@@ -65,6 +65,36 @@ describe('VideoWorkspace', () => {
     expect(within(screen.getByTestId('fullscreen-flyout-right-panel')).getByText('Overlay-Inhalt')).toBeInTheDocument()
   })
 
+  it('shows transient fullscreen feedback for keyboard actions', () => {
+    vi.useFakeTimers()
+    render(
+      <VideoWorkspace
+        selectedVideo={selectedVideo}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+      >
+        <div>Overlay-Inhalt</div>
+      </VideoWorkspace>
+    )
+
+    const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
+    act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+
+    fireEvent.keyDown(window, { code: 'ArrowRight', key: 'ArrowRight', shiftKey: true })
+    const hud = screen.getByTestId('fullscreen-keyboard-hud')
+    expect(hud).toHaveTextContent('Vorgesprungen')
+    expect(hud).toHaveTextContent('5 s')
+
+    act(() => { vi.advanceTimersByTime(1500) })
+    expect(screen.queryByTestId('fullscreen-keyboard-hud')).not.toBeInTheDocument()
+    vi.useRealTimers()
+  })
+
   it('zooms with the controls and can be reset', () => {
     render(
       <VideoWorkspace

@@ -47,6 +47,13 @@ interface VideoWorkspaceProps {
   overlayDialogs?: React.ReactNode
 }
 
+interface KeyboardHudMessage {
+  id: number
+  icon: string
+  label: string
+  value?: string
+}
+
 export function VideoWorkspace({
   selectedVideo,
   segments,
@@ -154,6 +161,28 @@ export function VideoWorkspace({
   const [matchTimeInput, setMatchTimeInput] = useState('')
   const [matchTimeError, setMatchTimeError] = useState<string | null>(null)
   const [reversePlaybackError, setReversePlaybackError] = useState<string | null>(null)
+  const [keyboardHud, setKeyboardHud] = useState<KeyboardHudMessage | null>(null)
+  const keyboardHudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const keyboardHudSequenceRef = useRef(0)
+
+  const showKeyboardHud = (icon: string, label: string, value?: string): void => {
+    if (!isFullscreen || !selectedVideo) return
+    if (keyboardHudTimerRef.current !== null) clearTimeout(keyboardHudTimerRef.current)
+    keyboardHudSequenceRef.current += 1
+    setKeyboardHud({ id: keyboardHudSequenceRef.current, icon, label, value })
+    keyboardHudTimerRef.current = setTimeout(() => {
+      setKeyboardHud(null)
+      keyboardHudTimerRef.current = null
+    }, 1500)
+  }
+
+  useEffect(() => () => {
+    if (keyboardHudTimerRef.current !== null) clearTimeout(keyboardHudTimerRef.current)
+  }, [])
+
+  useEffect(() => {
+    if (!isFullscreen) setKeyboardHud(null)
+  }, [isFullscreen])
   useEffect(() => setReversePlaybackError(null), [selectedVideo?.path])
   const prevIsFullscreenRef = useRef(false)
   useEffect(() => {
@@ -188,17 +217,29 @@ export function VideoWorkspace({
     // Arrow keys on range inputs control the slider — don't intercept them
     if (isRangeInput && (event.code === 'ArrowLeft' || event.code === 'ArrowRight')) return
 
-    if (event.code === 'Space') { event.preventDefault(); void playback.togglePlayPause() }
-    if (event.code === 'ArrowLeft' && !event.shiftKey) { event.preventDefault(); playback.jumpToPreviousSegment() }
-    if (event.code === 'ArrowRight' && !event.shiftKey) { event.preventDefault(); playback.jumpToNextSegment() }
-    if (event.code === 'ArrowLeft' && event.shiftKey) { event.preventDefault(); playback.jumpBySeconds(-SEEK_STEP_SECONDS) }
-    if (event.code === 'ArrowRight' && event.shiftKey) { event.preventDefault(); playback.jumpBySeconds(SEEK_STEP_SECONDS) }
-    if (event.key === ',') { event.preventDefault(); playback.stepFrame('backward') }
-    if (event.key === '.') { event.preventDefault(); playback.stepFrame('forward') }
-    if (event.key === '[') { event.preventDefault(); playback.jumpToPreviousKeyframe() }
-    if (event.key === ']') { event.preventDefault(); playback.jumpToNextKeyframe() }
-    if (event.key === '<') { event.preventDefault(); playback.adjustPlaybackRate('slower') }
-    if (event.key === '>') { event.preventDefault(); playback.adjustPlaybackRate('faster') }
+    if (event.code === 'Space') { event.preventDefault(); showKeyboardHud((playback.isPlaying || playback.isInterstitialCounting) ? 'Ⅱ' : '▶', (playback.isPlaying || playback.isInterstitialCounting) ? 'Angehalten' : 'Fortgesetzt'); void playback.togglePlayPause() }
+    if (event.code === 'ArrowLeft' && !event.shiftKey) { event.preventDefault(); showKeyboardHud('‹', 'Voriges Segment'); playback.jumpToPreviousSegment() }
+    if (event.code === 'ArrowRight' && !event.shiftKey) { event.preventDefault(); showKeyboardHud('›', 'Nächstes Segment'); playback.jumpToNextSegment() }
+    if (event.code === 'ArrowLeft' && event.shiftKey) { event.preventDefault(); showKeyboardHud('↶', 'Zurückgesprungen', `${SEEK_STEP_SECONDS} s`); playback.jumpBySeconds(-SEEK_STEP_SECONDS) }
+    if (event.code === 'ArrowRight' && event.shiftKey) { event.preventDefault(); showKeyboardHud('↷', 'Vorgesprungen', `${SEEK_STEP_SECONDS} s`); playback.jumpBySeconds(SEEK_STEP_SECONDS) }
+    if (event.key === ',') { event.preventDefault(); showKeyboardHud('‹', 'Ein Bild zurück', '1 Frame'); playback.stepFrame('backward') }
+    if (event.key === '.') { event.preventDefault(); showKeyboardHud('›', 'Ein Bild vor', '1 Frame'); playback.stepFrame('forward') }
+    if (event.key === '[') { event.preventDefault(); showKeyboardHud('◉‹', 'Vorheriger Keyframe'); playback.jumpToPreviousKeyframe() }
+    if (event.key === ']') { event.preventDefault(); showKeyboardHud('›◉', 'Nächster Keyframe'); playback.jumpToNextKeyframe() }
+    if (event.key === '<') {
+      event.preventDefault()
+      const index = PLAYBACK_RATES.indexOf(playback.playbackRate)
+      const nextRate = PLAYBACK_RATES[Math.max(0, index - 1)]
+      showKeyboardHud('◀', 'Langsamer', formatRate(nextRate))
+      playback.adjustPlaybackRate('slower')
+    }
+    if (event.key === '>') {
+      event.preventDefault()
+      const index = PLAYBACK_RATES.indexOf(playback.playbackRate)
+      const nextRate = PLAYBACK_RATES[Math.min(PLAYBACK_RATES.length - 1, index + 1)]
+      showKeyboardHud('▶', 'Schneller', formatRate(nextRate))
+      playback.adjustPlaybackRate('faster')
+    }
     if (event.code === 'KeyN') {
       event.preventDefault()
       if (playback.isSegmentMode) playback.exitSegmentMode()
@@ -206,11 +247,16 @@ export function VideoWorkspace({
     }
     if (event.code === 'KeyF') { event.preventDefault(); onToggleFilterOverlay() }
     if (event.code === 'KeyR' && !event.shiftKey) { event.preventDefault(); onRepeatSingleSegmentChange(!repeatSingleSegment) }
-    if (event.code === 'KeyR' && event.shiftKey) { event.preventDefault(); setReversePlaybackError(playback.toggleReversePlayback()) }
+    if (event.code === 'KeyR' && event.shiftKey) {
+      event.preventDefault()
+      const error = playback.toggleReversePlayback()
+      setReversePlaybackError(error)
+      if (error === null) showKeyboardHud(playback.isReversing ? '▶' : '◀', playback.isReversing ? 'Vorwärtswiedergabe' : 'Rückwärtswiedergabe', formatRate(playback.playbackRate))
+    }
     if (event.code === 'F11') { event.preventDefault(); void toggleFullscreen() }
-    if (event.code === 'Equal' || event.code === 'NumpadAdd') { event.preventDefault(); if (!playback.interstitialSegment) zoom.zoomToViewportPoint(zoom.zoomLevel + ZOOM_STEP) }
-    if (event.code === 'Minus' || event.code === 'NumpadSubtract') { event.preventDefault(); if (!playback.interstitialSegment) zoom.zoomToViewportPoint(zoom.zoomLevel - ZOOM_STEP) }
-    if (event.code === 'Digit0' || event.code === 'Numpad0') { event.preventDefault(); if (!playback.interstitialSegment) zoom.resetZoom() }
+    if (event.code === 'Equal' || event.code === 'NumpadAdd') { event.preventDefault(); if (!playback.interstitialSegment) { const next = Math.min(MAX_ZOOM_LEVEL, zoom.zoomLevel + ZOOM_STEP); showKeyboardHud('+', 'Vergrößert', formatRate(next)); zoom.zoomToViewportPoint(next) } }
+    if (event.code === 'Minus' || event.code === 'NumpadSubtract') { event.preventDefault(); if (!playback.interstitialSegment) { const next = Math.max(MIN_ZOOM_LEVEL, zoom.zoomLevel - ZOOM_STEP); showKeyboardHud('−', 'Verkleinert', formatRate(next)); zoom.zoomToViewportPoint(next) } }
+    if (event.code === 'Digit0' || event.code === 'Numpad0') { event.preventDefault(); if (!playback.interstitialSegment) { showKeyboardHud('↺', 'Zoom zurückgesetzt', formatRate(MIN_ZOOM_LEVEL)); zoom.resetZoom() } }
     if (event.code === 'KeyZ') { event.preventDefault(); zoom.setShowZoomDock(prev => !prev) }
     if (event.code === 'KeyM') { event.preventDefault(); playback.setUserMuted(prev => !prev) }
   })
@@ -742,6 +788,15 @@ export function VideoWorkspace({
                         />
                       </div>
                     ) : null}
+                  </div>
+                ) : null}
+                {isFullscreen && keyboardHud ? (
+                  <div key={keyboardHud.id} className="fullscreen-keyboard-hud" data-testid="fullscreen-keyboard-hud" aria-live="polite">
+                    <span className="fullscreen-keyboard-hud__icon" aria-hidden="true">{keyboardHud.icon}</span>
+                    <span className="fullscreen-keyboard-hud__copy">
+                      <span className="fullscreen-keyboard-hud__label">{keyboardHud.label}</span>
+                      {keyboardHud.value ? <strong>{keyboardHud.value}</strong> : null}
+                    </span>
                   </div>
                 ) : null}
               </div>
