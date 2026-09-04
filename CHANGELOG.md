@@ -1,3 +1,10 @@
+# [2.4.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.3.1...v2.4.0) (2026-09-04)
+
+
+### Features
+
+* **player:** add match clock and reverse playback ([847c3cd](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/847c3cd98f5ae0ebd4dab56d98714fcda85f2598))
+
 ## [2.3.1](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.3.0...v2.3.1) (2026-05-10)
 
 
