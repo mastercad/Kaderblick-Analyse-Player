@@ -1,3 +1,10 @@
+## [2.4.1](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.4.0...v2.4.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* improve fullscreen controls and feedback ([b636e21](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/b636e21a11e1a176504fc771fcfca7c37a500961))
+
 # [2.4.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.3.1...v2.4.0) (2026-09-04)
 
 
