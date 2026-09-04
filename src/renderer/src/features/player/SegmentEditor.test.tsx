@@ -67,6 +67,29 @@ describe('SegmentEditor', () => {
     })
   })
 
+  describe('video match settings', () => {
+    it('saves half and kickoff position immediately without requiring a valid segment', () => {
+      const onVideoSettingsChange = vi.fn()
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onVideoSettingsChange={onVideoSettingsChange}
+          onClose={() => {}}
+        />
+      )
+
+      fireEvent.change(screen.getByRole('combobox', { name: 'Halbzeit für vid1.mp4' }), { target: { value: '2' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Anstoß im Video für vid1.mp4' }), { target: { value: '02:41' } })
+
+      expect(onVideoSettingsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({ matchHalf: 2, kickoffVideoSeconds: 161, matchDurationSeconds: 2700 })
+      ])
+    })
+  })
+
   describe('loading segments', () => {
     it('displays segment times in H:MM:SS format', () => {
       render(
@@ -154,7 +177,7 @@ describe('SegmentEditor', () => {
           onClose={() => {}}
         />
       )
-      const select = screen.getByRole('combobox')
+      const select = screen.getByRole('combobox', { name: 'Video für Segment 1' })
       const options = within(select).getAllByRole('option')
       // Should only show the 2 loaded videos, no extra option for the old path
       expect(options).toHaveLength(2)

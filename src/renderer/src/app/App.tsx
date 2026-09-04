@@ -793,8 +793,10 @@ export function App() {
                     {segmentEditorOpen && videoLibrary.length > 0 && (
                       <SegmentEditor
                         videos={videoLibrary}
+                        activeVideoPath={selectedVideo?.path}
                         initialSegments={allSegments}
                         getCurrentTime={() => videoCurrentTimeRef.current}
+                        onVideoSettingsChange={(updatedVideos) => setVideoLibrary(updatedVideos)}
                         onLoad={(editedSegments) => {
                           const loadedPaths = new Set(videoLibrary.map((v) => v.path))
                           const preserved = allSegments.filter((s) => !loadedPaths.has(s.sourceVideoPath))
@@ -816,7 +818,7 @@ export function App() {
                           .then((streamDescriptor) => {
                             setVideoLibrary((prev) => {
                               const next = [...prev]
-                              next[index] = streamDescriptor
+                              next[index] = { ...video, ...streamDescriptor }
                               return next
                             })
                             isRecoveringPlaybackRef.current = false

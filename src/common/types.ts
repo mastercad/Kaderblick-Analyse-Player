@@ -49,6 +49,9 @@ export interface VideoFileDescriptor {
   playbackHint?: string
   onlinePlatform?: 'youtube' | 'vimeo'
   onlineVideoId?: string
+  matchHalf?: 1 | 2
+  kickoffVideoSeconds?: number
+  matchDurationSeconds?: number
 }
 
 export interface VideoPreparationProgress {

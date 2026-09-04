@@ -614,6 +614,9 @@ export function useOnlineVideoPlayback({
     // Not supported for online players
   }
 
+  const toggleReversePlayback = (): string | null =>
+    'Rückwärtswiedergabe ist für eingebettete Online-Videos nicht verfügbar.'
+
   const exitSegmentMode = (): void => {
     const wasCountingDown = interstitialTimerRef.current !== null
     if (interstitialTimerRef.current !== null) {
@@ -672,6 +675,7 @@ export function useOnlineVideoPlayback({
     sequenceIndex,
     activeSegmentIndex,
     playbackRate,
+    isReversing: false,
     volume,
     setVolume,
     userMuted,
@@ -702,6 +706,7 @@ export function useOnlineVideoPlayback({
     jumpToPreviousKeyframe: (): void => { /* not supported */ },
     changePlaybackRate,
     adjustPlaybackRate,
+    toggleReversePlayback,
     exitSegmentMode,
     startSegmentPlayback,
     handleTimeUpdate: (): void => { /* handled via polling */ },

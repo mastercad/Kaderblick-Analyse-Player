@@ -188,6 +188,40 @@ describe('VideoWorkspace – onCurrentTimeChange', () => {
 // ---------------------------------------------------------------------------
 
 describe('VideoWorkspace – speed controls', () => {
+  it('plays backwards over time without assigning a negative native playbackRate', () => {
+    vi.useFakeTimers()
+    render(
+      <VideoWorkspace {...baseProps} selectedVideo={directVideo}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video') as HTMLVideoElement
+    video.currentTime = 10
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Rückwärts' })) })
+    act(() => { vi.advanceTimersByTime(1000) })
+
+    expect(video.playbackRate).toBe(1)
+    expect(video.currentTime).toBeLessThanOrEqual(9.1)
+    expect(video.currentTime).toBeGreaterThanOrEqual(8.8)
+    expect(screen.getByRole('button', { name: 'Vorwärts' })).toHaveAttribute('aria-pressed', 'true')
+    vi.useRealTimers()
+  })
+
+  it('toggles reverse playback with Shift+R', () => {
+    render(
+      <VideoWorkspace {...baseProps} selectedVideo={directVideo}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video') as HTMLVideoElement
+    video.currentTime = 10
+    act(() => { fireEvent.keyDown(window, { code: 'KeyR', key: 'R', shiftKey: true }) })
+
+    expect(screen.getByRole('button', { name: 'Vorwärts' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('activates the clicked playback-rate button (aria-pressed=true)', () => {
     render(
       <VideoWorkspace {...baseProps} selectedVideo={directVideo}>
@@ -219,6 +253,28 @@ describe('VideoWorkspace – speed controls', () => {
 
     expect(halfSpeedBtn).toHaveAttribute('aria-pressed', 'true')
     expect(normalBtn).toHaveAttribute('aria-pressed', 'false')
+  })
+})
+
+describe('VideoWorkspace – frame navigation while playing', () => {
+  it('keeps the logical play state while stepping a frame', async () => {
+    const onPlayStateChange = vi.fn()
+    render(
+      <VideoWorkspace {...baseProps} selectedVideo={directVideo} onPlayStateChange={onPlayStateChange}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video') as HTMLVideoElement
+    fireLoadedMetadata(video)
+    video.currentTime = 10
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Play' })) })
+    onPlayStateChange.mockClear()
+
+    act(() => { fireEvent.keyDown(window, { key: '.', code: 'Period' }) })
+
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
+    expect(onPlayStateChange).not.toHaveBeenCalledWith(false)
   })
 })
 

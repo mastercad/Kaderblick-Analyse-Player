@@ -30,7 +30,7 @@
   "build": {
     "appId": "de.fussballverein.video-player",
     "productName": "Kaderblick Analyse Player",
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "artifactName": "kaderblick-analyse-player-${os}-${arch}.${ext}",
     "executableName": "kaderblick-analyse-player",
     "asarUnpack": [
       "node_modules/ffmpeg-static/**/*",
@@ -80,7 +80,7 @@
       "legalTrademarks": "Kaderblick Analyse Player"
     },
     "portable": {
-      "artifactName": "${productName}-${version}-portable-${arch}.${ext}"
+      "artifactName": "kaderblick-analyse-player-portable-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -91,7 +91,7 @@
       "installerIcon": "assets/kaderblick_player_appicon.ico",
       "uninstallerIcon": "assets/kaderblick_player_appicon.ico",
       "installerHeaderIcon": "assets/kaderblick_player_appicon.ico",
-      "artifactName": "${productName}-${version}-setup-${arch}.${ext}"
+      "artifactName": "kaderblick-analyse-player-setup-${arch}.${ext}"
     }
   },
   "dependencies": {

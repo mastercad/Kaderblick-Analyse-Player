@@ -60,6 +60,7 @@ export function useVideoPlayback({
   const [sequenceIndex, setSequenceIndex] = useState(-1)
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(-1)
   const [playbackRate, setPlaybackRate] = useState(1)
+  const [isReversing, setIsReversing] = useState(false)
   const [volume, setVolume] = useState(1)
   const [userMuted, setUserMuted] = useState(false)
   const [hasEverPlayed, setHasEverPlayed] = useState(false)
@@ -94,15 +95,20 @@ export function useVideoPlayback({
   const scrubWasPlayingRef = useRef(false)
   const scrubPendingTimeRef = useRef<number | null>(null)
   const scrubIsSeekingRef = useRef(false)
+  const reverseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const reverseLastTickRef = useRef(0)
+  const reverseTargetTimeRef = useRef(0)
+  const reversePlaybackRateRef = useRef(1)
+  const isReversingRef = useRef(false)
 
   const segmentMuted = isSegmentMode && sequenceIndex >= 0 && segments[sequenceIndex]?.audioTrack !== '1'
 
   // Keep the video element in sync with volume/mute state
   useEffect(() => {
     if (!videoRef.current) return
-    videoRef.current.muted = userMuted || segmentMuted
+    videoRef.current.muted = userMuted || segmentMuted || isReversing
     videoRef.current.volume = volume
-  }, [volume, userMuted, segmentMuted])
+  }, [volume, userMuted, segmentMuted, isReversing])
 
   // Full state reset when switching to a different video file
   // useLayoutEffect: fires synchronously after DOM commit, before any browser media events
@@ -123,6 +129,13 @@ export function useVideoPlayback({
     setActiveSegmentIndex(-1)
     setVideoError(undefined)
     setPlaybackRate(1)
+    reversePlaybackRateRef.current = 1
+    setIsReversing(false)
+    isReversingRef.current = false
+    if (reverseTimerRef.current !== null) {
+      clearInterval(reverseTimerRef.current)
+      reverseTimerRef.current = null
+    }
     setInterstitialSegment(null)
     setIsInterstitialCounting(false)
     setIsInterstitialCountingPaused(false)
@@ -143,6 +156,7 @@ export function useVideoPlayback({
   useEffect(() => {
     return () => {
       if (interstitialTimerRef.current !== null) clearTimeout(interstitialTimerRef.current)
+      if (reverseTimerRef.current !== null) clearInterval(reverseTimerRef.current)
     }
   }, [])
 
@@ -190,6 +204,7 @@ export function useVideoPlayback({
 
   const getEffectiveCurrentTime = (): number => {
     if (!videoRef.current || !selectedVideo) return 0
+    if (isReversingRef.current) return reverseTargetTimeRef.current
     if (selectedVideo.playbackMode === 'stream') {
       if (isStreamSeekRef.current) return streamStartSecondsRef.current
       return streamStartSecondsRef.current + videoRef.current.currentTime
@@ -207,13 +222,24 @@ export function useVideoPlayback({
 
   // --- Core playback ---
 
+  const stopReversePlayback = (): void => {
+    if (reverseTimerRef.current !== null) {
+      clearInterval(reverseTimerRef.current)
+      reverseTimerRef.current = null
+    }
+    isReversingRef.current = false
+    setIsReversing(false)
+  }
+
   const pausePlayback = (): void => {
+    stopReversePlayback()
     videoRef.current?.pause()
     setIsPlaying(false)
   }
 
   const playPlayback = async (): Promise<void> => {
     if (!videoRef.current) return
+    stopReversePlayback()
     try {
       await videoRef.current.play()
       setVideoError(undefined)
@@ -291,6 +317,7 @@ export function useVideoPlayback({
       setActiveSegmentIndex(findActiveSegmentIndex(segments, nextTimeSeconds))
       return
     }
+    if (isReversingRef.current) reverseTargetTimeRef.current = nextTimeSeconds
     videoRef.current.currentTime = nextTimeSeconds
     setCurrentTime(nextTimeSeconds)
     setActiveSegmentIndex(findActiveSegmentIndex(segments, nextTimeSeconds))
@@ -298,6 +325,10 @@ export function useVideoPlayback({
 
   const togglePlayPause = async (): Promise<void> => {
     if (!videoRef.current) return
+    if (isReversingRef.current) {
+      pausePlayback()
+      return
+    }
     if (videoRef.current.paused) {
       if (isInterstitialActiveRef.current) {
         if (interstitialTimerRef.current !== null) {
@@ -441,9 +472,23 @@ export function useVideoPlayback({
 
   const stepFrame = (direction: 'forward' | 'backward'): void => {
     if (!videoRef.current || !selectedVideo) return
-    if (!videoRef.current.paused) pausePlayback()
+    const resumeForwardPlayback = !isReversingRef.current && isPlaying
+    // A frame seek needs the native media element paused briefly, but the player remains
+    // logically "playing". Avoid toggling React's isPlaying state, otherwise the Play button
+    // visibly flashes to Pause and back for every keyboard step.
+    if (resumeForwardPlayback) videoRef.current.pause()
     const delta = direction === 'forward' ? FRAME_STEP_SECONDS : -FRAME_STEP_SECONDS
     seekTo(Math.max(0, Math.min(getEffectiveMaxDuration(), getEffectiveCurrentTime() + delta)))
+    if (resumeForwardPlayback) {
+      void videoRef.current.play().catch((error: unknown) => {
+        const nextMessage = error instanceof Error
+          ? error.message
+          : getMediaErrorMessage(videoRef.current!, selectedVideo)
+        setVideoError(nextMessage)
+        onVideoError?.(nextMessage, false)
+        setIsPlaying(false)
+      })
+    }
   }
 
   const jumpBySeconds = (delta: number): void => {
@@ -467,6 +512,7 @@ export function useVideoPlayback({
     if (!videoRef.current) return
     videoRef.current.playbackRate = rate
     setPlaybackRate(rate)
+    reversePlaybackRateRef.current = rate
   }
 
   const adjustPlaybackRate = (direction: 'faster' | 'slower'): void => {
@@ -476,6 +522,48 @@ export function useVideoPlayback({
     } else if (direction === 'slower' && currentIndex > 0) {
       changePlaybackRate(PLAYBACK_RATES[currentIndex - 1])
     }
+  }
+
+  const toggleReversePlayback = (): string | null => {
+    if (!videoRef.current) return 'Kein Video geladen.'
+    if (isReversingRef.current) {
+      stopReversePlayback()
+      void playPlayback()
+      return null
+    }
+    if (selectedVideo?.playbackMode === 'stream') {
+      return 'Rückwärtswiedergabe ist im Streaming-Modus nicht verfügbar.'
+    }
+    const startTime = getEffectiveCurrentTime()
+    if (startTime <= 0) return 'Das Video befindet sich bereits am Anfang.'
+
+    videoRef.current.pause()
+    setIsSegmentMode(false)
+    setSequenceIndex(-1)
+    isReversingRef.current = true
+    setIsReversing(true)
+    setIsPlaying(true)
+    setHasEverPlayed(true)
+    reverseLastTickRef.current = performance.now()
+    reverseTargetTimeRef.current = startTime
+    reverseTimerRef.current = setInterval(() => {
+      if (!videoRef.current || !isReversingRef.current) return
+      const now = performance.now()
+      const elapsedSeconds = Math.min(0.2, Math.max(0, now - reverseLastTickRef.current) / 1000)
+      reverseLastTickRef.current = now
+      const nextTime = Math.max(0, reverseTargetTimeRef.current - elapsedSeconds * reversePlaybackRateRef.current)
+      reverseTargetTimeRef.current = nextTime
+      // Do not queue another decoder seek while the previous frame is still loading.
+      if (!videoRef.current.seeking) videoRef.current.currentTime = nextTime
+      setCurrentTime(nextTime)
+      onCurrentTimeChange?.(nextTime)
+      setActiveSegmentIndex(findActiveSegmentIndex(segments, nextTime))
+      if (nextTime === 0) {
+        stopReversePlayback()
+        setIsPlaying(false)
+      }
+    }, 40)
+    return null
   }
 
   // --- Segment mode ---
@@ -692,6 +780,7 @@ onAllSegmentsDone?.()
     sequenceIndex,
     activeSegmentIndex,
     playbackRate,
+    isReversing,
     volume,
     setVolume,
     userMuted,
@@ -722,6 +811,7 @@ onAllSegmentsDone?.()
     jumpToPreviousKeyframe,
     changePlaybackRate,
     adjustPlaybackRate,
+    toggleReversePlayback,
     exitSegmentMode,
     startSegmentPlayback,
     handleTimeUpdate,

@@ -15,9 +15,11 @@ interface SegmentDraft {
 
 interface SegmentEditorProps {
   videos: VideoFileDescriptor[]
+  activeVideoPath?: string
   initialSegments: Segment[]
   getCurrentTime: () => number
   onLoad: (segments: Segment[]) => void
+  onVideoSettingsChange?: (videos: VideoFileDescriptor[]) => void
   onClose: () => void
 }
 
@@ -78,7 +80,7 @@ const draftsToSegments = (drafts: SegmentDraft[]): Segment[] => {
   })
 }
 
-export function SegmentEditor({ videos, initialSegments, getCurrentTime, onLoad, onClose }: SegmentEditorProps) {
+export function SegmentEditor({ videos, activeVideoPath, initialSegments, getCurrentTime, onLoad, onVideoSettingsChange, onClose }: SegmentEditorProps) {
   const [drafts, setDrafts] = useState<SegmentDraft[]>(() => {
     if (initialSegments.length > 0) {
       return initialSegments.map((s) => segmentToDraft(s, videos))
@@ -87,6 +89,12 @@ export function SegmentEditor({ videos, initialSegments, getCurrentTime, onLoad,
   })
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [videoSettings, setVideoSettings] = useState(() => videos.map((video) => ({
+    path: video.path,
+    half: video.matchHalf ?? 1,
+    kickoffInput: formatClockTime(video.kickoffVideoSeconds ?? 0),
+    matchDurationInput: formatClockTime(video.matchDurationSeconds ?? 45 * 60)
+  })))
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Close on Escape
@@ -157,6 +165,27 @@ export function SegmentEditor({ videos, initialSegments, getCurrentTime, onLoad,
 
   const hasInvalidRows = drafts.some((d) => !isDraftValid(d))
   const validCount = drafts.filter(isDraftValid).length
+  const updateVideoSetting = (path: string, changes: Partial<(typeof videoSettings)[number]>) => {
+    const nextSettings = videoSettings.map((setting) => setting.path === path ? { ...setting, ...changes } : setting)
+    setVideoSettings(nextSettings)
+    if (nextSettings.some((setting) => {
+      const kickoff = parseTimeInput(setting.kickoffInput)
+      const duration = parseTimeInput(setting.matchDurationInput)
+      return kickoff === null || duration === null || duration <= 0
+    })) {
+      return
+    }
+    onVideoSettingsChange?.(videos.map((video) => {
+      const setting = nextSettings.find((candidate) => candidate.path === video.path)
+      return setting ? {
+        ...video,
+        matchHalf: setting.half as 1 | 2,
+        kickoffVideoSeconds: parseTimeInput(setting.kickoffInput)!,
+        matchDurationSeconds: parseTimeInput(setting.matchDurationInput)!
+      } : video
+    }))
+    setErrorMessage(null)
+  }
 
   return (
     <div className="segment-editor-overlay" role="dialog" aria-modal="true" aria-label="Segment-Editor">
@@ -169,6 +198,38 @@ export function SegmentEditor({ videos, initialSegments, getCurrentTime, onLoad,
         </div>
 
         <div className="segment-editor__body">
+          <section className="segment-editor__match-settings" aria-labelledby="match-settings-title">
+            <div>
+              <h3 id="match-settings-title">Video-Zeitzuordnung</h3>
+              <p>Lege Halbzeit, Spielzeit und die Videoposition des Anstoßes fest.</p>
+            </div>
+            {videoSettings.map((setting) => {
+              const video = videos.find((candidate) => candidate.path === setting.path)
+              return (
+                <div className="segment-editor__match-row" key={setting.path}>
+                  <strong title={setting.path}>{video?.fileName ?? setting.path}</strong>
+                  <label>
+                    Halbzeit
+                    <select aria-label={`Halbzeit für ${video?.fileName ?? setting.path}`} value={setting.half} onChange={(event) => updateVideoSetting(setting.path, { half: Number(event.target.value) as 1 | 2 })}>
+                      <option value={1}>1. Halbzeit</option>
+                      <option value={2}>2. Halbzeit</option>
+                    </select>
+                  </label>
+                  <label>
+                    Anstoß im Video
+                    <input aria-label={`Anstoß im Video für ${video?.fileName ?? setting.path}`} value={setting.kickoffInput} placeholder="z. B. 02:41" onChange={(event) => updateVideoSetting(setting.path, { kickoffInput: event.target.value })} />
+                  </label>
+                  <label>
+                    Spielzeit
+                    <input aria-label={`Spielzeit für ${video?.fileName ?? setting.path}`} value={setting.matchDurationInput} placeholder="45:00" onChange={(event) => updateVideoSetting(setting.path, { matchDurationInput: event.target.value })} />
+                  </label>
+                  <button className="button button--subtle" type="button" disabled={activeVideoPath !== undefined && activeVideoPath !== setting.path} title={activeVideoPath !== undefined && activeVideoPath !== setting.path ? 'Dafür zuerst dieses Video im Player auswählen' : 'Aktuelle Position des Players übernehmen'} onClick={() => updateVideoSetting(setting.path, { kickoffInput: formatClockTime(getCurrentTime()) })}>Aktuelle Position</button>
+                </div>
+              )
+            })}
+            <span className="segment-editor__autosave-hint">Gültige Änderungen werden sofort übernommen.</span>
+          </section>
+
           <table className="segment-editor__table">
             <thead>
               <tr>
@@ -192,6 +253,7 @@ export function SegmentEditor({ videos, initialSegments, getCurrentTime, onLoad,
                       <td className="segment-editor__col-video">
                         <select
                           className="segment-editor__select"
+                          aria-label={`Video für Segment ${index + 1}`}
                           value={draft.videoPath}
                           onChange={(e) => updateDraft(draft.draftId, { videoPath: e.target.value })}
                         >

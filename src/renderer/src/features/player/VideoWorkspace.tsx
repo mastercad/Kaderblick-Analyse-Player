@@ -1,7 +1,8 @@
 import { cloneElement, isValidElement, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react'
 import { buildCssFilter } from '../../../../common/filterUtils'
-import { findActiveSegmentIndex } from '../../../../common/segmentUtils'
+import { findActiveSegmentIndex, parseTimeInput } from '../../../../common/segmentUtils'
 import { formatClockTime } from '../../../../common/timeUtils'
+import { matchTimeToVideoTime, videoTimeToMatchTime } from '../../../../common/matchTimeUtils'
 import type { FilterSettings, Segment, VideoFileDescriptor } from '../../../../common/types'
 import appLogo from '../../../../../assets/kaderblick_analyse_player_appicon.svg'
 import { SegmentList } from './SegmentList'
@@ -150,6 +151,10 @@ export function VideoWorkspace({
 
   // Splash screen: show whenever fullscreen is entered; hide once playback/interstitial starts.
   const [fullscreenStarted, setFullscreenStarted] = useState(false)
+  const [matchTimeInput, setMatchTimeInput] = useState('')
+  const [matchTimeError, setMatchTimeError] = useState<string | null>(null)
+  const [reversePlaybackError, setReversePlaybackError] = useState<string | null>(null)
+  useEffect(() => setReversePlaybackError(null), [selectedVideo?.path])
   const prevIsFullscreenRef = useRef(false)
   useEffect(() => {
     const justEntered = isFullscreen && !prevIsFullscreenRef.current
@@ -200,7 +205,8 @@ export function VideoWorkspace({
       else void playback.startSegmentPlayback()
     }
     if (event.code === 'KeyF') { event.preventDefault(); onToggleFilterOverlay() }
-    if (event.code === 'KeyR') { event.preventDefault(); onRepeatSingleSegmentChange(!repeatSingleSegment) }
+    if (event.code === 'KeyR' && !event.shiftKey) { event.preventDefault(); onRepeatSingleSegmentChange(!repeatSingleSegment) }
+    if (event.code === 'KeyR' && event.shiftKey) { event.preventDefault(); setReversePlaybackError(playback.toggleReversePlayback()) }
     if (event.code === 'F11') { event.preventDefault(); void toggleFullscreen() }
     if (event.code === 'Equal' || event.code === 'NumpadAdd') { event.preventDefault(); if (!playback.interstitialSegment) zoom.zoomToViewportPoint(zoom.zoomLevel + ZOOM_STEP) }
     if (event.code === 'Minus' || event.code === 'NumpadSubtract') { event.preventDefault(); if (!playback.interstitialSegment) zoom.zoomToViewportPoint(zoom.zoomLevel - ZOOM_STEP) }
@@ -240,6 +246,27 @@ export function VideoWorkspace({
     if (wasScrubbing && continuePlaying) void playback.togglePlayPause()
   }
 
+  const hasMatchClock = selectedVideo?.matchHalf !== undefined && selectedVideo.kickoffVideoSeconds !== undefined
+  const currentMatchTime = hasMatchClock
+    ? videoTimeToMatchTime(playback.currentTime, selectedVideo.kickoffVideoSeconds!, selectedVideo.matchHalf!)
+    : null
+  const handleMatchTimeSeek = (event: React.FormEvent): void => {
+    event.preventDefault()
+    if (!selectedVideo || !hasMatchClock) return
+    const matchSeconds = parseTimeInput(matchTimeInput)
+    if (matchSeconds === null) {
+      setMatchTimeError('Bitte eine Spielzeit wie 45:12 eingeben.')
+      return
+    }
+    const videoSeconds = matchTimeToVideoTime(matchSeconds, selectedVideo.kickoffVideoSeconds!, selectedVideo.matchHalf!)
+    if (videoSeconds < 0 || (playback.duration > 0 && videoSeconds > playback.duration)) {
+      setMatchTimeError('Diese Spielzeit liegt außerhalb des Videos.')
+      return
+    }
+    setMatchTimeError(null)
+    handleTimelineSeek(videoSeconds)
+  }
+
   // ─── Derived UI fragments ────────────────────────────────────────────────────
 
   const errorBanner = playbackRecoveryInProgress
@@ -265,7 +292,7 @@ export function VideoWorkspace({
 
   const transportControls = (
     <div className="controls-row player-controls__transport">
-      <button className="button button--primary" type="button" onClick={() => void playback.togglePlayPause()} disabled={!selectedVideo}>
+      <button className="button button--primary" type="button" onClick={() => void playback.togglePlayPause()} disabled={!selectedVideo} title="Play / Pause (Leertaste)">
         {(playback.isPlaying || playback.isInterstitialCounting) ? 'Pause' : 'Play'}
       </button>
       <button
@@ -278,10 +305,10 @@ export function VideoWorkspace({
       >
         {playback.isSegmentMode ? 'Segmentmodus beenden' : 'Nur Segmente abspielen'}
       </button>
-      <button className="button" type="button" onClick={playback.jumpToPreviousSegment} disabled={segments.length === 0}>
+      <button className="button" type="button" onClick={playback.jumpToPreviousSegment} disabled={segments.length === 0} title="Voriges Segment (←)">
         Voriges Segment
       </button>
-      <button className="button" type="button" onClick={playback.jumpToNextSegment} disabled={segments.length === 0}>
+      <button className="button" type="button" onClick={playback.jumpToNextSegment} disabled={segments.length === 0} title="Nächstes Segment (→)">
         Nächstes Segment
       </button>
       <button
@@ -311,13 +338,23 @@ export function VideoWorkspace({
   const speedControls = (
     <div className="controls-row speed-controls" role="group" aria-label="Wiedergabegeschwindigkeit">
       <span className="speed-controls__label">Geschwindigkeit</span>
-      <button className="button button--subtle speed-controls__step" type="button" onClick={() => playback.adjustPlaybackRate('slower')} disabled={!selectedVideo || playback.playbackRate <= PLAYBACK_RATES[0]} title="Langsamer (<)" aria-label="Langsamer">◀</button>
+      <button
+        className={`button button--subtle${playback.isReversing ? ' button--active' : ''}`}
+        type="button"
+        disabled={!selectedVideo}
+        aria-pressed={playback.isReversing}
+        title={playback.isReversing ? 'Zur Vorwärtswiedergabe wechseln (Shift+R)' : 'Video rückwärts abspielen (Shift+R, ohne Ton)'}
+        onClick={() => setReversePlaybackError(playback.toggleReversePlayback())}
+      >
+        {playback.isReversing ? 'Vorwärts' : 'Rückwärts'}
+      </button>
+      <button className="button button--subtle speed-controls__step" type="button" onClick={() => { setReversePlaybackError(null); playback.adjustPlaybackRate('slower') }} disabled={!selectedVideo || playback.playbackRate <= PLAYBACK_RATES[0]} title="Langsamer (<)" aria-label="Langsamer">◀</button>
       {PLAYBACK_RATES.map((rate) => (
         <button
           key={rate}
           className={`button speed-controls__rate${playback.playbackRate === rate ? ' button--primary speed-controls__rate--active' : ' button--subtle'}`}
           type="button"
-          onClick={() => playback.changePlaybackRate(rate)}
+          onClick={() => { setReversePlaybackError(null); playback.changePlaybackRate(rate) }}
           disabled={!selectedVideo}
           title={`Geschwindigkeit: ${formatRate(rate)}`}
           aria-pressed={playback.playbackRate === rate}
@@ -325,7 +362,8 @@ export function VideoWorkspace({
           {formatRate(rate)}
         </button>
       ))}
-      <button className="button button--subtle speed-controls__step" type="button" onClick={() => playback.adjustPlaybackRate('faster')} disabled={!selectedVideo || playback.playbackRate >= PLAYBACK_RATES[PLAYBACK_RATES.length - 1]} title="Schneller (>)" aria-label="Schneller">▶</button>
+      <button className="button button--subtle speed-controls__step" type="button" onClick={() => { setReversePlaybackError(null); playback.adjustPlaybackRate('faster') }} disabled={!selectedVideo || playback.playbackRate >= PLAYBACK_RATES[PLAYBACK_RATES.length - 1]} title="Schneller (>)" aria-label="Schneller">▶</button>
+      {reversePlaybackError && <span className="speed-controls__error" role="alert">{reversePlaybackError}</span>}
     </div>
   )
 
@@ -398,6 +436,7 @@ export function VideoWorkspace({
           <kbd>M</kbd><span>Stummschalten ein-/ausschalten</span>
           <kbd>+ −</kbd><span>Zoom vergrößern / verkleinern</span>
           <kbd>0</kbd><span>Zoom zurücksetzen</span>
+          <kbd>Shift+R</kbd><span>Vorwärts / Rückwärts umschalten</span>
         </div>
       </details>
     </div>
@@ -411,7 +450,7 @@ export function VideoWorkspace({
   ) : null
 
   const repeatToggle = (
-    <label className="toggle-row" title="Aktives Segment endlos wiederholen, statt automatisch zur nächsten Szene zu wechseln">
+    <label className="toggle-row" title="Aktives Segment endlos wiederholen (R)">
       <input
         type="checkbox"
         checked={repeatSingleSegment}
@@ -424,14 +463,25 @@ export function VideoWorkspace({
   )
 
   const timeRow = (
-    <div className="time-row">
-      <span className="time-row__current">{formatClockTime(playback.currentTime)}</span>
+    <div className="match-time-controls">
+      <div className="time-row">
+        <span className="time-row__current">{formatClockTime(playback.currentTime)}</span>
       {playback.duration > 0 ? (
         <span className="time-row__remaining" aria-label={`Verbleibend: ${formatClockTime(Math.max(0, playback.duration - playback.currentTime))}`}>
           −{formatClockTime(Math.max(0, playback.duration - playback.currentTime))}
         </span>
       ) : null}
-      <span className="time-row__total">{formatClockTime(playback.duration)}</span>
+        <span className="time-row__total">{formatClockTime(playback.duration)}</span>
+      </div>
+      {hasMatchClock && (
+        <form className="match-time-jump" onSubmit={handleMatchTimeSeek}>
+          <span className="match-time-jump__current">Spielzeit: {currentMatchTime !== null && currentMatchTime >= 0 ? formatClockTime(currentMatchTime) : 'vor Anstoß'}</span>
+          <label htmlFor="match-time-input">Springe zu Spielzeit</label>
+          <input id="match-time-input" value={matchTimeInput} onChange={(event) => setMatchTimeInput(event.target.value)} placeholder={selectedVideo?.matchHalf === 2 ? 'z. B. 45:12' : 'z. B. 09:00'} />
+          <button className="button button--subtle" type="submit">Springen</button>
+          {matchTimeError && <span className="match-time-jump__error" role="alert">{matchTimeError}</span>}
+        </form>
+      )}
     </div>
   )
 
@@ -458,7 +508,7 @@ export function VideoWorkspace({
   const zoomDockInner = selectedVideo ? (
     <>
       <div className="video-stage__zoom-actions">
-        <button aria-label="Zoom verkleinern" className="icon-button video-stage__zoom-button" type="button" onClick={() => zoom.handleZoomStep('out')} disabled={zoom.zoomLevel <= MIN_ZOOM_LEVEL || !!playback.interstitialSegment}>-</button>
+        <button aria-label="Zoom verkleinern" title="Zoom verkleinern (−)" className="icon-button video-stage__zoom-button" type="button" onClick={() => zoom.handleZoomStep('out')} disabled={zoom.zoomLevel <= MIN_ZOOM_LEVEL || !!playback.interstitialSegment}>-</button>
         <input
           aria-label="Zoomstufe"
           className="video-stage__zoom-slider"
@@ -470,8 +520,8 @@ export function VideoWorkspace({
           disabled={!!playback.interstitialSegment}
           onChange={(event) => zoom.handleZoomSliderChange(Number(event.target.value))}
         />
-        <button aria-label="Zoom vergroessern" className="icon-button video-stage__zoom-button" type="button" onClick={() => zoom.handleZoomStep('in')} disabled={zoom.zoomLevel >= MAX_ZOOM_LEVEL || !!playback.interstitialSegment}>+</button>
-        <button className="button button--subtle video-stage__zoom-reset" type="button" onClick={zoom.resetZoom} disabled={!zoom.isZoomed || !!playback.interstitialSegment}>Reset</button>
+        <button aria-label="Zoom vergroessern" title="Zoom vergrößern (+)" className="icon-button video-stage__zoom-button" type="button" onClick={() => zoom.handleZoomStep('in')} disabled={zoom.zoomLevel >= MAX_ZOOM_LEVEL || !!playback.interstitialSegment}>+</button>
+        <button className="button button--subtle video-stage__zoom-reset" type="button" title="Zoom zurücksetzen (0)" onClick={zoom.resetZoom} disabled={!zoom.isZoomed || !!playback.interstitialSegment}>Reset</button>
       </div>
       <p className="video-stage__zoom-hint" key={zoom.isZoomed ? 'zoomed' : 'idle'}>
         {zoom.isZoomed
