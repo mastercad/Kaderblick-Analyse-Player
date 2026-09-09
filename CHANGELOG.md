@@ -1,3 +1,10 @@
+## [2.4.2](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.4.1...v2.4.2) (2026-09-09)
+
+
+### Bug Fixes
+
+* **player:** persist segment drafts and allow disabling transitions ([ad97644](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/ad976445021ea2ac0ac5549aef390f851f60f548))
+
 ## [2.4.1](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.4.0...v2.4.1) (2026-09-04)
 
 
