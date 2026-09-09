@@ -5,7 +5,7 @@ import { builtInFilterPresets, defaultFilterSettings } from '../../../common/fil
 import { areFilterSettingsEqual, mergeCustomPresets, sanitizeFilterSettings } from '../../../common/filterUtils'
 import { matchSegmentsToVideo, matchSegmentsToVideos, parseSegmentsCsv, interpolateSegmentTitles } from '../../../common/segmentUtils'
 import { formatClockTime } from '../../../common/timeUtils'
-import type { AppInfo, AppSettingsExport, CsvFileDescriptor, FilterPreset, FilterSettings, Segment, SessionSnapshot, VideoFileDescriptor, VideoPreparationProgress } from '../../../common/types'
+import type { AppInfo, AppSettingsExport, CsvFileDescriptor, FilterPreset, FilterSettings, Segment, SegmentEditorDraft, SessionSnapshot, VideoFileDescriptor, VideoPreparationProgress } from '../../../common/types'
 import { AboutDialog } from '../features/app/AboutDialog'
 import { SessionRestoreDialog } from '../features/app/SessionRestoreDialog'
 import { StartScreen } from '../features/app/StartScreen'
@@ -80,6 +80,7 @@ export function App() {
   const [autoStartSegmentsFromEnd, setAutoStartSegmentsFromEnd] = useState(false)
   const [streamingConfirmFor, setStreamingConfirmFor] = useState<{ video: VideoFileDescriptor; index: number } | null>(null)
   const [segmentEditorOpen, setSegmentEditorOpen] = useState(false)
+  const [segmentEditorDrafts, setSegmentEditorDrafts] = useState<SegmentEditorDraft[]>()
   const [sessionRestorePrompt, setSessionRestorePrompt] = useState<SessionSnapshot | null>(() => loadStoredSessionSnapshot())
   const videoCurrentTimeRef = useRef(0)
   const isSegmentModeRef = useRef(false)
@@ -96,7 +97,7 @@ export function App() {
   const [interstitialDuration, setInterstitialDuration] = useState<number>(() => {
     const stored = window.localStorage.getItem(interstitialDurationStorageKey)
     const n = Number(stored)
-    return Number.isFinite(n) && n >= 1 && n <= 5 ? n : 3
+    return Number.isFinite(n) && n >= 0 && n <= 5 ? n : 3
   })
   const [interstitialLogoDataUrl, setInterstitialLogoDataUrl] = useState<string | null>(() =>
     window.localStorage.getItem(interstitialLogoStorageKey)
@@ -226,13 +227,15 @@ export function App() {
       csvFileName: selectedCsv?.fileName,
       csvPath: selectedCsv?.path,
       csvContent: selectedCsv?.content,
+      allSegments,
+      segmentEditorDrafts,
       filterSettings,
       filterOverlayVisible,
       repeatSingleSegment,
       selectedPresetId
     }
     window.localStorage.setItem(sessionSnapshotKey, JSON.stringify(snapshot))
-  }, [videoLibrary, activeVideoIndex, selectedCsv, filterSettings, filterOverlayVisible, repeatSingleSegment, selectedPresetId])
+  }, [videoLibrary, activeVideoIndex, selectedCsv, allSegments, segmentEditorDrafts, filterSettings, filterOverlayVisible, repeatSingleSegment, selectedPresetId])
 
   const handleRestoreSession = (snapshot: SessionSnapshot): void => {
     setSessionRestorePrompt(null)
@@ -241,6 +244,7 @@ export function App() {
     setFilterSettings(sanitizeFilterSettings(snapshot.filterSettings ?? defaultFilterSettings))
     setFilterOverlayVisible(snapshot.filterOverlayVisible ?? false)
     setRepeatSingleSegment(snapshot.repeatSingleSegment ?? false)
+    setSegmentEditorDrafts(snapshot.segmentEditorDrafts)
     const allPresets = [...builtInFilterPresets, ...customPresets]
     if (allPresets.some((p) => p.id === snapshot.selectedPresetId)) {
       setSelectedPresetId(snapshot.selectedPresetId)
@@ -252,6 +256,10 @@ export function App() {
         content: snapshot.csvContent
       }
       setSelectedCsv(csv)
+    }
+    if (Array.isArray(snapshot.allSegments)) {
+      setAllSegments(snapshot.allSegments)
+    } else if (snapshot.csvContent) {
       try {
         setAllSegments(parseSegmentsCsv(snapshot.csvContent))
       } catch {
@@ -285,6 +293,7 @@ export function App() {
     setAutoPlayRecoveredVideo(false)
     setSessionRestorePrompt(null)
     setVideoLibrary(videos)
+    setSegmentEditorDrafts(undefined)
     setActiveVideoIndex(0)
     setStatusMessage(`${videos.length} Video${videos.length !== 1 ? 's' : ''} geladen.`)
   }
@@ -382,6 +391,7 @@ export function App() {
       const parsedSegments = parseSegmentsCsv(csvFile.content)
       setSelectedCsv(csvFile)
       setAllSegments(parsedSegments)
+      setSegmentEditorDrafts(undefined)
 
       const segmentCount = videoLibrary.length > 0 ? matchSegmentsToVideos(parsedSegments, videoLibrary.map((v) => v.fileName)).length : 0
       setStatusMessage(`${csvFile.fileName} geladen. ${parsedSegments.length} Segmente importiert, ${segmentCount} davon passen zu den geladenen Videos.`)
@@ -651,11 +661,13 @@ export function App() {
                       <div className="header-menu__duration">
                         <span className="header-menu__duration-label">Dauer</span>
                         <div className="header-menu__duration-btns">
-                          {[1, 2, 3, 4, 5].map((s) => (
+                          {[0, 1, 2, 3, 4, 5].map((s) => (
                             <button
                               key={s}
                               className={`header-menu__duration-btn${interstitialDuration === s ? ' header-menu__duration-btn--active' : ''}`}
                               type="button"
+                              aria-label={s === 0 ? 'Segmentübergänge deaktivieren' : `Segmentübergang ${s} Sekunden`}
+                              title={s === 0 ? 'Keine Segmentübergänge anzeigen' : undefined}
                               onClick={() => handleSetInterstitialDuration(s)}
                             >
                               {s}s
@@ -795,7 +807,9 @@ export function App() {
                         videos={videoLibrary}
                         activeVideoPath={selectedVideo?.path}
                         initialSegments={allSegments}
+                        initialDrafts={segmentEditorDrafts}
                         getCurrentTime={() => videoCurrentTimeRef.current}
+                        onDraftsChange={setSegmentEditorDrafts}
                         onVideoSettingsChange={(updatedVideos) => setVideoLibrary(updatedVideos)}
                         onLoad={(editedSegments) => {
                           const loadedPaths = new Set(videoLibrary.map((v) => v.path))

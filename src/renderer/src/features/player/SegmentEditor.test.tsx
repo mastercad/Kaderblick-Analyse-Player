@@ -162,6 +162,57 @@ describe('SegmentEditor', () => {
     })
   })
 
+  describe('draft persistence', () => {
+    it('reports the latest row values when the editor is closed', async () => {
+      const onDraftsChange = vi.fn()
+      const onClose = vi.fn()
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onDraftsChange={onDraftsChange}
+          onClose={onClose}
+        />
+      )
+
+      const [row] = getDataRows()
+      const inputs = getTextInputs(row)
+      fireEvent.change(inputs[0], { target: { value: '12:34' } })
+      fireEvent.click(screen.getByText('Schließen'))
+
+      expect(onClose).toHaveBeenCalledOnce()
+      expect(onDraftsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({ startTimeInput: '12:34' })
+      ])
+    })
+
+    it('restores a previously saved incomplete row draft', () => {
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          initialSegments={[]}
+          initialDrafts={[{
+            draftId: 'saved-draft',
+            videoPath: vid1.path,
+            startTimeInput: '12:34',
+            endTimeInput: '',
+            title: 'Noch nicht fertig',
+            subTitle: '',
+            audioEnabled: true
+          }]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      expect(screen.getByDisplayValue('12:34')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('Noch nicht fertig')).toBeInTheDocument()
+    })
+  })
+
   describe('video dropdown', () => {
     it('no extra option when segment path matches loaded video by filename', () => {
       const segWithOldPath = makeSegment({

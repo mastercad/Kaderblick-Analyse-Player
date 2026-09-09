@@ -19,6 +19,16 @@ export interface Segment {
   audioTrack: string
 }
 
+export interface SegmentEditorDraft {
+  draftId: string
+  videoPath: string
+  startTimeInput: string
+  endTimeInput: string
+  title: string
+  subTitle: string
+  audioEnabled: boolean
+}
+
 export interface FilterSettings {
   blur: number
   brightness: number
@@ -91,6 +101,8 @@ export interface SessionSnapshot {
   csvFileName?: string
   csvPath?: string
   csvContent?: string
+  allSegments?: Segment[]
+  segmentEditorDrafts?: SegmentEditorDraft[]
   filterSettings: FilterSettings
   filterOverlayVisible: boolean
   repeatSingleSegment: boolean

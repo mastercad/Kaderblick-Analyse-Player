@@ -86,6 +86,10 @@ Dabei werden zum Beispiel gesichert:
 
 Das ist hilfreich, wenn ihr einen Analysezustand dokumentieren oder später wieder nachvollziehen wollt.
 
+## Segmentübergänge einstellen
+
+Im Menü oben rechts könnt ihr unter `Übergangsscreen` die Dauer zwischen zwei Segmenten festlegen. Mit `0s` werden Segmentübergänge vollständig deaktiviert; die Wiedergabe springt dann ohne Übergangsscreen direkt zum nächsten Segment.
+
 ## Über die App
 
 Im Bereich `Über die App` seht ihr die wichtigsten Informationen zur Anwendung, zur Version und zu den wichtigsten Kürzeln.

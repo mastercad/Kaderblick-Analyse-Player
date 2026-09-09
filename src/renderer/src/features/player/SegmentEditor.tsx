@@ -1,34 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getBaseName, parseTimeInput, serializeSegmentsToCsv } from '../../../../common/segmentUtils'
 import { formatClockTime } from '../../../../common/timeUtils'
-import type { Segment, VideoFileDescriptor } from '../../../../common/types'
-
-interface SegmentDraft {
-  draftId: string
-  videoPath: string
-  startTimeInput: string
-  endTimeInput: string
-  title: string
-  subTitle: string
-  audioEnabled: boolean
-}
+import type { Segment, SegmentEditorDraft, VideoFileDescriptor } from '../../../../common/types'
 
 interface SegmentEditorProps {
   videos: VideoFileDescriptor[]
   activeVideoPath?: string
   initialSegments: Segment[]
+  initialDrafts?: SegmentEditorDraft[]
   getCurrentTime: () => number
   onLoad: (segments: Segment[]) => void
+  onDraftsChange?: (drafts: SegmentEditorDraft[]) => void
   onVideoSettingsChange?: (videos: VideoFileDescriptor[]) => void
   onClose: () => void
 }
 
 const newDraftId = (() => {
   let counter = 0
-  return () => `draft-${++counter}`
+  return () => `draft-${Date.now()}-${++counter}`
 })()
 
-const segmentToDraft = (segment: Segment, videos: VideoFileDescriptor[]): SegmentDraft => {
+const segmentToDraft = (segment: Segment, videos: VideoFileDescriptor[]): SegmentEditorDraft => {
   const matchedVideo =
     videos.find((v) => v.path === segment.sourceVideoPath) ??
     videos.find((v) => v.fileName === segment.sourceVideoName)
@@ -43,7 +35,7 @@ const segmentToDraft = (segment: Segment, videos: VideoFileDescriptor[]): Segmen
   }
 }
 
-const makeDraft = (videoPath: string): SegmentDraft => ({
+const makeDraft = (videoPath: string): SegmentEditorDraft => ({
   draftId: newDraftId(),
   videoPath,
   startTimeInput: '',
@@ -53,14 +45,14 @@ const makeDraft = (videoPath: string): SegmentDraft => ({
   audioEnabled: true
 })
 
-const isDraftValid = (draft: SegmentDraft): boolean => {
+const isDraftValid = (draft: SegmentEditorDraft): boolean => {
   if (!draft.videoPath) return false
   const startSeconds = parseTimeInput(draft.startTimeInput)
   const endSeconds = parseTimeInput(draft.endTimeInput)
   return startSeconds !== null && endSeconds !== null && startSeconds >= 0 && endSeconds > startSeconds
 }
 
-const draftsToSegments = (drafts: SegmentDraft[]): Segment[] => {
+const draftsToSegments = (drafts: SegmentEditorDraft[]): Segment[] => {
   return drafts.filter(isDraftValid).map((draft, index) => {
     const startSeconds = parseTimeInput(draft.startTimeInput)!
     const endSeconds = parseTimeInput(draft.endTimeInput)!
@@ -80,8 +72,11 @@ const draftsToSegments = (drafts: SegmentDraft[]): Segment[] => {
   })
 }
 
-export function SegmentEditor({ videos, activeVideoPath, initialSegments, getCurrentTime, onLoad, onVideoSettingsChange, onClose }: SegmentEditorProps) {
-  const [drafts, setDrafts] = useState<SegmentDraft[]>(() => {
+export function SegmentEditor({ videos, activeVideoPath, initialSegments, initialDrafts, getCurrentTime, onLoad, onDraftsChange, onVideoSettingsChange, onClose }: SegmentEditorProps) {
+  const [drafts, setDrafts] = useState<SegmentEditorDraft[]>(() => {
+    if (initialDrafts && initialDrafts.length > 0) {
+      return initialDrafts
+    }
     if (initialSegments.length > 0) {
       return initialSegments.map((s) => segmentToDraft(s, videos))
     }
@@ -97,16 +92,26 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, getCur
   })))
   const containerRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    onDraftsChange?.(drafts)
+  }, [drafts, onDraftsChange])
+
+  const handleClose = useCallback(() => {
+    // Also notify synchronously so a close directly after editing cannot lose the last value.
+    onDraftsChange?.(drafts)
+    onClose()
+  }, [drafts, onClose, onDraftsChange])
+
   // Close on Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') handleClose()
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  }, [handleClose])
 
-  const updateDraft = useCallback((draftId: string, changes: Partial<SegmentDraft>) => {
+  const updateDraft = useCallback((draftId: string, changes: Partial<SegmentEditorDraft>) => {
     setDrafts((prev) => prev.map((d) => d.draftId === draftId ? { ...d, ...changes } : d))
   }, [])
 
@@ -192,7 +197,7 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, getCur
       <div className="segment-editor" ref={containerRef}>
         <div className="segment-editor__header">
           <h2 className="segment-editor__title">Segment-Editor</h2>
-          <button className="button button--subtle segment-editor__close" onClick={onClose} aria-label="Schließen">
+          <button className="button button--subtle segment-editor__close" onClick={handleClose} aria-label="Schließen">
             ✕
           </button>
         </div>
@@ -371,9 +376,12 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, getCur
         </div>
 
         <div className="segment-editor__footer">
-          <button className="button button--subtle" onClick={onClose}>
-            Schließen
-          </button>
+          <div>
+            <button className="button button--subtle" onClick={handleClose}>
+              Schließen
+            </button>
+            <span className="segment-editor__autosave-hint"> Zeilenentwürfe werden automatisch gespeichert.</span>
+          </div>
           <div className="segment-editor__footer-actions">
             <button className="button" disabled={validCount === 0} onClick={loadOnly}>
               Laden
