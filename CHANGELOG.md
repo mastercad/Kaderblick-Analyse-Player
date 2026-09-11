@@ -1,3 +1,10 @@
+# [2.5.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.4.3...v2.5.0) (2026-09-11)
+
+
+### Features
+
+* redesign the whole player ([59a25d4](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/59a25d4109991e9e1fe5b4291494b5c289990195))
+
 ## [2.4.3](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.4.2...v2.4.3) (2026-09-11)
 
 
