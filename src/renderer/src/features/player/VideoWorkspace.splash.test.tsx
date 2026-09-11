@@ -95,6 +95,7 @@ describe('VideoWorkspace – Splash Screen', () => {
     videoEl.play = vi.fn().mockResolvedValue(undefined)
 
     // Click Play → playPlayback() is called → isPlaying becomes true
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Wiedergabe und Timeline einblenden' }))
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Play' })) })
 
     const splash = document.querySelector('.video-splash')!
@@ -132,16 +133,23 @@ describe('VideoWorkspace – Splash Screen', () => {
     expect(document.querySelector('.video-splash')).toBeNull()
   })
 
-  it('pressing Space on the splash title does not reveal the splash in non-fullscreen mode', () => {
+  it('uses Space for playback even when the splash title has focus', async () => {
     render(
       <VideoWorkspace {...baseProps} selectedVideo={directVideo}>
         <div />
       </VideoWorkspace>
     )
 
+    const videoEl = document.querySelector('video')!
+    videoEl.play = vi.fn().mockResolvedValue(undefined)
     const title = document.querySelector('.video-splash__title')!
-    act(() => { fireEvent.keyDown(title, { code: 'Space' }) })
+    await act(async () => {
+      fireEvent.keyDown(title, { code: 'Space', key: ' ' })
+      fireEvent.keyUp(title, { code: 'Space', key: ' ' })
+      await Promise.resolve()
+    })
 
+    expect(videoEl.play).toHaveBeenCalledOnce()
     expect(document.querySelector('.video-splash')).toHaveClass('video-splash--hidden')
   })
 })

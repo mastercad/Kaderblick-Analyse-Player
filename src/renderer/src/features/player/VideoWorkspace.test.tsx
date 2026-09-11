@@ -65,6 +65,80 @@ describe('VideoWorkspace', () => {
     expect(within(screen.getByTestId('fullscreen-flyout-right-panel')).getByText('Overlay-Inhalt')).toBeInTheDocument()
   })
 
+  it('keeps a hovered fullscreen flyout open while moving from its trigger into the panel', () => {
+    vi.useFakeTimers()
+    render(
+      <VideoWorkspace
+        selectedVideo={selectedVideo}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+      >
+        <div>Overlay-Inhalt</div>
+      </VideoWorkspace>
+    )
+
+    const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
+    act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+
+    const toolsTrigger = screen.getByRole('button', { name: 'Werkzeuge einblenden' })
+    const toolsPanel = screen.getByTestId('fullscreen-flyout-right-panel')
+    fireEvent.mouseEnter(toolsTrigger)
+    expect(toolsTrigger).toHaveAttribute('aria-expanded', 'true')
+    expect(toolsPanel).not.toHaveAttribute('inert')
+
+    fireEvent.mouseLeave(toolsTrigger)
+    fireEvent.mouseEnter(toolsPanel)
+    act(() => { vi.advanceTimersByTime(240) })
+    expect(toolsTrigger).toHaveAttribute('aria-expanded', 'true')
+    expect(toolsPanel).toHaveClass('fullscreen-flyout-panel--open')
+    expect(toolsPanel).not.toHaveAttribute('inert')
+    vi.useRealTimers()
+  })
+
+  it('removes focus from a closed jump panel so Space controls playback', async () => {
+    render(
+      <VideoWorkspace
+        selectedVideo={{ ...selectedVideo, matchHalf: 1, kickoffVideoSeconds: 0 }}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video')!
+    video.play = vi.fn().mockResolvedValue(undefined)
+    const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
+    act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+
+    const controlsTrigger = screen.getByRole('button', { name: 'Wiedergabe und Timeline einblenden' })
+    fireEvent.click(controlsTrigger)
+    const jumpInput = screen.getByLabelText('Springe zu Spielzeit')
+    act(() => { jumpInput.focus() })
+    fireEvent.change(jumpInput, { target: { value: '09:00' } })
+    act(() => { controlsTrigger.focus() })
+    fireEvent.click(controlsTrigger)
+    fireEvent.mouseLeave(controlsTrigger)
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 240)) })
+
+    expect(jumpInput).not.toHaveFocus()
+    await act(async () => {
+      fireEvent.keyDown(window, { code: 'Space', key: ' ' })
+      await Promise.resolve()
+    })
+    expect(video.play).toHaveBeenCalledOnce()
+  })
+
   it('shows transient fullscreen feedback for keyboard actions', () => {
     vi.useFakeTimers()
     render(

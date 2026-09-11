@@ -2317,6 +2317,11 @@ kbd {
   outline: none;
 }
 
+.fullscreen-edge-trigger[aria-expanded='true'] {
+  background: rgba(9, 15, 9, 0.78);
+  color: #fff;
+}
+
 .fullscreen-edge-trigger--top,
 .fullscreen-edge-trigger--bottom {
   left: 50%;
@@ -2407,11 +2412,16 @@ kbd {
 
 .fullscreen-flyout-panel {
   opacity: 0;
-  transition: transform 180ms ease, opacity 180ms ease;
+  visibility: hidden;
+  pointer-events: none;
+  transition: transform 180ms ease, opacity 180ms ease, visibility 0s linear 180ms;
 }
 
 .fullscreen-flyout-panel--open {
   opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
 }
 
 .fullscreen-flyout-panel--top {
@@ -2440,8 +2450,8 @@ kbd {
 .fullscreen-flyout-panel--right {
   top: 32px;
   right: 24px;
-  bottom: 32px;
-  width: min(320px, calc(100vw - 80px));
+  width: min(286px, calc(100vw - 80px));
+  max-height: min(520px, calc(100vh - 64px));
   transform: translateX(calc(100% + 16px));
 }
 
@@ -2454,6 +2464,7 @@ kbd {
   right: auto;
   bottom: 22px;
   width: min(1100px, calc(100vw - 72px));
+  max-height: min(320px, calc(100vh - 64px));
   transform: translate(-50%, calc(100% + 12px));
 }
 
@@ -2479,8 +2490,8 @@ kbd {
 
 .fullscreen-card--stacked {
   display: grid;
-  gap: 14px;
-  height: 100%;
+  gap: 9px;
+  max-height: inherit;
   overflow: auto;
 }
 
@@ -2529,6 +2540,15 @@ kbd {
   backdrop-filter: none;
   padding: 0;
   border-radius: 0;
+}
+
+.fullscreen-filter-slot .filter-grid--compact {
+  gap: 3px;
+}
+
+.fullscreen-filter-slot .filter-overlay .slider-row {
+  grid-template-columns: 68px 36px minmax(0, 1fr);
+  padding: 3px 6px;
 }
 
 .fullscreen-filter-slot .filter-overlay .panel__eyebrow {

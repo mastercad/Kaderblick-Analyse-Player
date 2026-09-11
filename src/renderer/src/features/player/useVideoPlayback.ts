@@ -11,7 +11,7 @@ import { findNextKeyframeTime, findPreviousKeyframeTime } from '../../../../comm
 import { getSegmentPlaybackTransition } from '../../../../common/segmentPlayback'
 import type { Segment, VideoFileDescriptor } from '../../../../common/types'
 import { getMediaErrorMessage, getMissingVideoTrackMessage } from './playerUtils'
-import { FRAME_STEP_SECONDS, PLAYBACK_RATES, SEEK_STEP_SECONDS } from './playerTypes'
+import { FRAME_STEP_SECONDS, PLAYBACK_RATES, PREVIOUS_SEGMENT_REPEAT_WINDOW_MS, SEEK_STEP_SECONDS } from './playerTypes'
 import type { Size } from './playerTypes'
 
 interface UseVideoPlaybackOptions {
@@ -101,6 +101,16 @@ export function useVideoPlayback({
   const reverseTargetTimeRef = useRef(0)
   const reversePlaybackRateRef = useRef(1)
   const isReversingRef = useRef(false)
+  const reverseRunIdRef = useRef(0)
+  const isPlayingRef = useRef(false)
+  const playbackIntentRef = useRef<boolean | null>(null)
+  const playbackCommandRef = useRef(0)
+  const previousSegmentRestartRef = useRef<{ segmentIndex: number; expiresAt: number } | null>(null)
+
+  const setPlaybackIsPlaying = (value: boolean): void => {
+    isPlayingRef.current = value
+    setIsPlaying(value)
+  }
 
   const segmentMuted = isSegmentMode && sequenceIndex >= 0 && segments[sequenceIndex]?.audioTrack !== '1'
 
@@ -124,7 +134,8 @@ export function useVideoPlayback({
   useEffect(() => {
     setDuration(0)
     setCurrentTime(0)
-    setIsPlaying(false)
+    setPlaybackIsPlaying(false)
+    playbackIntentRef.current = null
     setIsSegmentMode(false)
     setSequenceIndex(-1)
     setActiveSegmentIndex(-1)
@@ -133,6 +144,7 @@ export function useVideoPlayback({
     reversePlaybackRateRef.current = 1
     setIsReversing(false)
     isReversingRef.current = false
+    reverseRunIdRef.current += 1
     if (reverseTimerRef.current !== null) {
       clearTimeout(reverseTimerRef.current)
       reverseTimerRef.current = null
@@ -224,6 +236,7 @@ export function useVideoPlayback({
   // --- Core playback ---
 
   const stopReversePlayback = (): void => {
+    reverseRunIdRef.current += 1
     if (reverseTimerRef.current !== null) {
       clearTimeout(reverseTimerRef.current)
       reverseTimerRef.current = null
@@ -233,26 +246,36 @@ export function useVideoPlayback({
   }
 
   const pausePlayback = (): void => {
+    playbackCommandRef.current += 1
+    playbackIntentRef.current = false
     stopReversePlayback()
     videoRef.current?.pause()
-    setIsPlaying(false)
+    setPlaybackIsPlaying(false)
   }
 
   const playPlayback = async (): Promise<void> => {
     if (!videoRef.current) return
+    const commandId = ++playbackCommandRef.current
+    playbackIntentRef.current = true
     stopReversePlayback()
     try {
       await videoRef.current.play()
+      if (commandId !== playbackCommandRef.current) {
+        if (playbackIntentRef.current !== true || isReversingRef.current) videoRef.current.pause()
+        return
+      }
       setVideoError(undefined)
-      setIsPlaying(true)
+      setPlaybackIsPlaying(true)
       setHasEverPlayed(true)
     } catch (error) {
+      if (commandId !== playbackCommandRef.current) return
+      playbackIntentRef.current = false
       const nextMessage = error instanceof Error
         ? error.message
         : getMediaErrorMessage(videoRef.current, selectedVideo)
       setVideoError(nextMessage)
       onVideoError?.(nextMessage, false)
-      setIsPlaying(false)
+      setPlaybackIsPlaying(false)
     }
   }
 
@@ -266,8 +289,8 @@ export function useVideoPlayback({
     isScrubRef.current = true
     scrubIsSeekingRef.current = false
     scrubPendingTimeRef.current = null
-    scrubWasPlayingRef.current = isPlaying
-    if (isPlaying) pausePlayback()
+    scrubWasPlayingRef.current = isPlayingRef.current
+    if (isPlayingRef.current) pausePlayback()
   }
 
   /**
@@ -307,9 +330,10 @@ export function useVideoPlayback({
   }
 
   const seekTo = (nextTimeSeconds: number): void => {
+    previousSegmentRestartRef.current = null
     if (!videoRef.current) return
     if (selectedVideo?.playbackMode === 'stream') {
-      const wasPlaying = isPlaying
+      const wasPlaying = isPlayingRef.current
       isStreamSeekRef.current = true
       streamStartSecondsRef.current = nextTimeSeconds
       setStreamUrl(buildStreamUrl(selectedVideo.path, nextTimeSeconds))
@@ -326,34 +350,31 @@ export function useVideoPlayback({
 
   const togglePlayPause = async (): Promise<void> => {
     if (!videoRef.current) return
-    if (isReversingRef.current) {
-      pausePlayback()
+    if (isInterstitialActiveRef.current) {
+      if (interstitialTimerRef.current !== null) {
+        // Countdown is running — user clicked "Pause": freeze timer, keep overlay visible
+        const elapsed = Date.now() - interstitialStartMsRef.current
+        interstitialRemainingMsRef.current = Math.max(0, interstitialCurrentDurationMsRef.current - elapsed)
+        clearTimeout(interstitialTimerRef.current)
+        interstitialTimerRef.current = null
+        setIsInterstitialCounting(false)
+        setIsInterstitialCountingPaused(true)
+      } else {
+        // Image is showing, no countdown yet (or paused mid-count) — start/resume countdown
+        const remaining = interstitialRemainingMsRef.current
+        interstitialRemainingMsRef.current = 0
+        setIsInterstitialCountingPaused(false)
+        startInterstitialCountdown(remaining > 0 ? remaining : undefined)
+      }
       return
     }
-    if (videoRef.current.paused) {
-      if (isInterstitialActiveRef.current) {
-        if (interstitialTimerRef.current !== null) {
-          // Countdown is running — user clicked "Pause": freeze timer, keep overlay visible
-          const elapsed = Date.now() - interstitialStartMsRef.current
-          interstitialRemainingMsRef.current = Math.max(0, interstitialCurrentDurationMsRef.current - elapsed)
-          clearTimeout(interstitialTimerRef.current)
-          interstitialTimerRef.current = null
-          setIsInterstitialCounting(false)
-          setIsInterstitialCountingPaused(true)
-          // isInterstitialActiveRef stays true, interstitialSegment stays → overlay remains
-        } else {
-          // Image is showing, no countdown yet (or paused mid-count) — start/resume countdown
-          const remaining = interstitialRemainingMsRef.current
-          interstitialRemainingMsRef.current = 0
-          setIsInterstitialCountingPaused(false)
-          startInterstitialCountdown(remaining > 0 ? remaining : undefined)
-        }
-        return
-      }
-      await playPlayback()
-    } else {
-      pausePlayback()
+    if (isReversingRef.current) {
+      if (isPlayingRef.current) pauseReversePlayback()
+      else resumeReversePlayback()
+      return
     }
+    if (isPlayingRef.current) pausePlayback()
+    else await playPlayback()
   }
 
   // --- Segment navigation ---
@@ -430,7 +451,7 @@ export function useVideoPlayback({
     if (withInterstitial && interstitialDuration > 0 && segmentIndex !== activeSegmentIndex) {
       // isPlaying is false during an active interstitial (video is paused while overlay is shown),
       // so also check isInterstitialCounting to preserve "effectively playing" state.
-      const wasPlaying = isPlaying || isInterstitialCounting
+      const wasPlaying = isPlayingRef.current || isInterstitialCounting
       // Update the timeline marker immediately via state, but do NOT seek video.currentTime yet
       // so the video frame stays frozen while the interstitial overlay is visible.
       setCurrentTime(segment.startSeconds)
@@ -461,7 +482,26 @@ export function useVideoPlayback({
   }
 
   const jumpToPreviousSegment = (): void => {
-    const previousIndex = getPreviousSegmentIndex(segments, currentTime)
+    const activeIndex = findActiveSegmentIndex(segments, getEffectiveCurrentTime())
+    if (activeIndex >= 0) {
+      const previousRestart = previousSegmentRestartRef.current
+      if (previousRestart?.segmentIndex === activeIndex && Date.now() <= previousRestart.expiresAt) {
+        previousSegmentRestartRef.current = null
+        if (activeIndex > 0) jumpToSegment(activeIndex - 1, false, true)
+        else onFirstSegmentReached?.()
+        return
+      }
+
+      jumpToSegment(activeIndex)
+      previousSegmentRestartRef.current = {
+        segmentIndex: activeIndex,
+        expiresAt: Date.now() + PREVIOUS_SEGMENT_REPEAT_WINDOW_MS
+      }
+      return
+    }
+
+    previousSegmentRestartRef.current = null
+    const previousIndex = getPreviousSegmentIndex(segments, getEffectiveCurrentTime())
     if (previousIndex >= 0) {
       jumpToSegment(previousIndex, false, true)
     } else {
@@ -473,7 +513,7 @@ export function useVideoPlayback({
 
   const stepFrame = (direction: 'forward' | 'backward'): void => {
     if (!videoRef.current || !selectedVideo) return
-    const resumeForwardPlayback = !isReversingRef.current && isPlaying
+    const resumeForwardPlayback = !isReversingRef.current && isPlayingRef.current
     // A frame seek needs the native media element paused briefly, but the player remains
     // logically "playing". Avoid toggling React's isPlaying state, otherwise the Play button
     // visibly flashes to Pause and back for every keyboard step.
@@ -487,7 +527,7 @@ export function useVideoPlayback({
           : getMediaErrorMessage(videoRef.current!, selectedVideo)
         setVideoError(nextMessage)
         onVideoError?.(nextMessage, false)
-        setIsPlaying(false)
+        setPlaybackIsPlaying(false)
       })
     }
   }
@@ -509,11 +549,20 @@ export function useVideoPlayback({
 
   // --- Playback rate ---
 
+  const getReversePlaybackBoundary = (): number => (
+    isSegmentMode && sequenceIndex >= 0
+      ? (segments[sequenceIndex]?.startSeconds ?? 0)
+      : 0
+  )
+
   const changePlaybackRate = (rate: number): void => {
     if (!videoRef.current) return
     if (isReversingRef.current) {
       const elapsedSeconds = Math.max(0, performance.now() - reverseStartedAtRef.current) / 1000
-      const currentTarget = Math.max(0, reverseStartedTimeRef.current - elapsedSeconds * reversePlaybackRateRef.current)
+      const currentTarget = Math.max(
+        getReversePlaybackBoundary(),
+        reverseStartedTimeRef.current - elapsedSeconds * reversePlaybackRateRef.current
+      )
       reverseStartedTimeRef.current = currentTarget
       reverseStartedAtRef.current = performance.now()
       reverseTargetTimeRef.current = currentTarget
@@ -532,30 +581,73 @@ export function useVideoPlayback({
     }
   }
 
-  const updateReversePlayback = (): void => {
-    if (!videoRef.current || !isReversingRef.current) return
+  const updateReversePlayback = (runId: number): void => {
+    if (
+      !videoRef.current ||
+      !isReversingRef.current ||
+      !isPlayingRef.current ||
+      runId !== reverseRunIdRef.current
+    ) return
     const elapsedSeconds = Math.max(0, performance.now() - reverseStartedAtRef.current) / 1000
-    const nextTime = Math.max(0, reverseStartedTimeRef.current - elapsedSeconds * reversePlaybackRateRef.current)
+    const segmentStart = getReversePlaybackBoundary()
+    const nextTime = Math.max(segmentStart, reverseStartedTimeRef.current - elapsedSeconds * reversePlaybackRateRef.current)
     reverseTargetTimeRef.current = nextTime
     if (!videoRef.current.seeking) videoRef.current.currentTime = nextTime
     setCurrentTime(nextTime)
     onCurrentTimeChange?.(nextTime)
     setActiveSegmentIndex(findActiveSegmentIndex(segments, nextTime))
 
-    if (nextTime === 0) {
+    if (nextTime === segmentStart) {
+      playbackIntentRef.current = false
+      setPlaybackIsPlaying(false)
       stopReversePlayback()
-      setIsPlaying(false)
       return
     }
 
-    reverseTimerRef.current = setTimeout(updateReversePlayback, 16)
+    reverseTimerRef.current = setTimeout(() => updateReversePlayback(runId), 16)
+  }
+
+  const pauseReversePlayback = (): void => {
+    reverseRunIdRef.current += 1
+    playbackCommandRef.current += 1
+    playbackIntentRef.current = false
+    if (reverseTimerRef.current !== null) {
+      clearTimeout(reverseTimerRef.current)
+      reverseTimerRef.current = null
+    }
+    videoRef.current?.pause()
+    setPlaybackIsPlaying(false)
+  }
+
+  const resumeReversePlayback = (): void => {
+    const startTime = getEffectiveCurrentTime()
+    if (!videoRef.current || startTime <= 0) return
+    playbackCommandRef.current += 1
+    playbackIntentRef.current = true
+    videoRef.current.pause()
+    isReversingRef.current = true
+    setIsReversing(true)
+    setPlaybackIsPlaying(true)
+    setHasEverPlayed(true)
+    reverseStartedAtRef.current = performance.now()
+    reverseStartedTimeRef.current = startTime
+    reverseTargetTimeRef.current = startTime
+    const runId = ++reverseRunIdRef.current
+    updateReversePlayback(runId)
   }
 
   const toggleReversePlayback = (): string | null => {
     if (!videoRef.current) return 'Kein Video geladen.'
     if (isReversingRef.current) {
+      const wasPlaying = isPlayingRef.current
+      playbackCommandRef.current += 1
       stopReversePlayback()
-      void playPlayback()
+      if (wasPlaying) void playPlayback()
+      else {
+        playbackIntentRef.current = false
+        videoRef.current.pause()
+        setPlaybackIsPlaying(false)
+      }
       return null
     }
     if (selectedVideo?.playbackMode === 'stream') {
@@ -564,17 +656,17 @@ export function useVideoPlayback({
     const startTime = getEffectiveCurrentTime()
     if (startTime <= 0) return 'Das Video befindet sich bereits am Anfang.'
 
-    videoRef.current.pause()
-    setIsSegmentMode(false)
-    setSequenceIndex(-1)
+    playbackCommandRef.current += 1
+    reverseRunIdRef.current += 1
+    reverseTargetTimeRef.current = startTime
     isReversingRef.current = true
     setIsReversing(true)
-    setIsPlaying(true)
-    setHasEverPlayed(true)
-    reverseStartedAtRef.current = performance.now()
-    reverseStartedTimeRef.current = startTime
-    reverseTargetTimeRef.current = startTime
-    updateReversePlayback()
+    if (isPlayingRef.current) resumeReversePlayback()
+    else {
+      playbackIntentRef.current = false
+      videoRef.current.pause()
+      setPlaybackIsPlaying(false)
+    }
     return null
   }
 
@@ -603,21 +695,32 @@ export function useVideoPlayback({
 
   const startSegmentPlayback = async (forceAutoPlay = false): Promise<void> => {
     let startIndex: number
+    let mustJumpToSegmentStart = true
     if (pendingStartFromLastSegmentRef.current) {
       pendingStartFromLastSegmentRef.current = false
       startIndex = segments.length > 0 ? segments.length - 1 : 0
     } else {
+      const effectiveCurrentTime = getEffectiveCurrentTime()
+      const currentSegmentIndex = findActiveSegmentIndex(segments, effectiveCurrentTime)
       startIndex = repeatSingleSegment && activeSegmentIndex >= 0
         ? activeSegmentIndex
-        : resolveSegmentSequenceStartIndex(segments, currentTime)
+        : resolveSegmentSequenceStartIndex(segments, effectiveCurrentTime)
+      mustJumpToSegmentStart = currentSegmentIndex !== startIndex
     }
 
     if (startIndex < 0) return
 
     // Respect current play state — this button is a toggle, not a play button
-    const wasPlaying = isPlaying || forceAutoPlay
+    const wasPlaying = isPlayingRef.current || forceAutoPlay
     setIsSegmentMode(true)
     setSequenceIndex(startIndex)
+
+    // Enabling segment mode while already inside its selected segment is only a mode
+    // change. Keep the exact analysis frame instead of restarting that segment.
+    if (!mustJumpToSegmentStart) {
+      if (forceAutoPlay && !isPlayingRef.current) await playPlayback()
+      return
+    }
 
     if (interstitialDuration > 0) {
       const segment = segments[startIndex]
@@ -696,7 +799,7 @@ export function useVideoPlayback({
       const transition = getSegmentPlaybackTransition(segments, sequenceIndex, { repeatSingleSegment })
 
       if (transition.action === 'pause') {
-        const wasPlaying = isPlaying
+        const wasPlaying = isPlayingRef.current
         pausePlayback()
         setIsSegmentMode(false)
         setSequenceIndex(-1)
@@ -770,18 +873,38 @@ onAllSegmentsDone?.()
     const recoverable =
       errorCode === MediaError.MEDIA_ERR_DECODE || errorCode === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
     videoRef.current.pause()
+    playbackIntentRef.current = false
     setVideoError(nextMessage)
-    setIsPlaying(false)
+    setPlaybackIsPlaying(false)
     setIsSegmentMode(false)
     setSequenceIndex(-1)
     onVideoError?.(nextMessage, recoverable)
   }
 
   const handleVideoEnded = (): void => {
-    setIsPlaying(false)
+    playbackIntentRef.current = false
+    setPlaybackIsPlaying(false)
     setIsSegmentMode(false)
     setSequenceIndex(-1)
     onVideoEnded?.()
+  }
+
+  const handleVideoPlay = (): void => {
+    if (isReversingRef.current || playbackIntentRef.current === false) {
+      videoRef.current?.pause()
+      if (!isReversingRef.current) setPlaybackIsPlaying(false)
+      return
+    }
+    setPlaybackIsPlaying(true)
+  }
+
+  const handleVideoPause = (): void => {
+    if (isReversingRef.current) return
+    // Internal frame stepping and direction changes briefly pause the native element.
+    // A current explicit play intent must win over such delayed pause events.
+    if (playbackIntentRef.current === true) return
+    playbackIntentRef.current = false
+    setPlaybackIsPlaying(false)
   }
 
   return {
@@ -831,6 +954,8 @@ onAllSegmentsDone?.()
     handleMetadataLoaded,
     handleCanPlay,
     handleVideoError,
+    handleVideoPlay,
+    handleVideoPause,
     handleVideoEnded
   }
 }

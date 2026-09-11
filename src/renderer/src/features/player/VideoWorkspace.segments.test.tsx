@@ -70,13 +70,20 @@ describe('VideoWorkspace – interstitial on segment navigation', () => {
       </VideoWorkspace>
     )
 
-    // Move currentTime into the second segment so getPreviousSegmentIndex finds the first
+    // Move currentTime into the second segment. The first click restarts it;
+    // the second click selects the preceding segment and shows the interstitial.
     // writable: true is required so that seekTo() inside jumpToSegment can re-assign currentTime
     const videoEl = document.querySelector('video')!
     Object.defineProperty(videoEl, 'currentTime', { value: 95, configurable: true, writable: true })
     act(() => {
       fireEvent(videoEl, new Event('timeupdate'))
     })
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Voriges Segment' }))
+    })
+
+    expect(screen.queryByText('Nächste Szene')).not.toBeInTheDocument()
 
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: 'Voriges Segment' }))
@@ -220,7 +227,10 @@ describe('VideoWorkspace – interstitial timer behaviour', () => {
     Object.defineProperty(videoEl, 'currentTime', { value: 95, configurable: true, writable: true })
     act(() => { fireEvent(videoEl, new Event('timeupdate')) })
 
-    // Navigate to segment 1 (start=60 s) → interstitial shown, marker jumps to 01:00
+    // First restart segment 2, then navigate to segment 1 (start=60 s).
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Voriges Segment' }))
+    })
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: 'Voriges Segment' }))
     })
@@ -441,6 +451,32 @@ describe('VideoWorkspace – interstitial timer behaviour', () => {
 // ---------------------------------------------------------------------------
 
 describe('VideoWorkspace – segment mode toggle respects play state', () => {
+  it('keeps the current frame when toggling segment mode inside an active segment', () => {
+    render(
+      <VideoWorkspace {...baseProps} interstitialDuration={3}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const videoEl = document.querySelector('video')!
+    videoEl.currentTime = 75
+    act(() => { fireEvent(videoEl, new Event('timeupdate')) })
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Nur Segmente abspielen' }))
+    })
+
+    expect(videoEl.currentTime).toBe(75)
+    expect(screen.queryByText('Nächste Szene')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Segmentmodus beenden' })).toBeInTheDocument()
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Segmentmodus beenden' }))
+    })
+
+    expect(videoEl.currentTime).toBe(75)
+  })
+
   it('enters segment mode without starting playback when video is paused', () => {
     render(
       <VideoWorkspace {...baseProps} interstitialDuration={0}>
@@ -1431,8 +1467,8 @@ describe('VideoWorkspace – Bug 1: onAllSegmentsDone wird gerufen wenn kein nä
   })
 })
 
-describe('VideoWorkspace – Bug 3a: onFirstSegmentReached wird am ersten Segment gerufen', () => {
-  it('ruft onFirstSegmentReached wenn Voriges-Segment am ersten Segment geklickt (pausiert)', () => {
+describe('VideoWorkspace – zweistufige Rückwärtsnavigation', () => {
+  it('startet beim ersten Klick das erste Segment neu und ruft erst beim zweiten Klick onFirstSegmentReached auf', () => {
     const onFirstSegmentReached = vi.fn()
     render(
       <VideoWorkspace {...baseProps} interstitialDuration={0} onFirstSegmentReached={onFirstSegmentReached}>
@@ -1441,16 +1477,21 @@ describe('VideoWorkspace – Bug 3a: onFirstSegmentReached wird am ersten Segmen
     )
 
     const videoEl = document.querySelector('video')!
-    // Im ersten Segment (s1: 60–90)
-    Object.defineProperty(videoEl, 'currentTime', { value: 65, configurable: true, writable: true })
+    // Exakt am Anfang des ersten Segments (s1: 60–90)
+    Object.defineProperty(videoEl, 'currentTime', { value: 60, configurable: true, writable: true })
     act(() => { fireEvent(videoEl, new Event('timeupdate')) })
+
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Voriges Segment' })) })
+
+    expect(document.querySelector('.time-row__current')?.textContent).toBe('01:00')
+    expect(onFirstSegmentReached).not.toHaveBeenCalled()
 
     act(() => { fireEvent.click(screen.getByRole('button', { name: 'Voriges Segment' })) })
 
     expect(onFirstSegmentReached).toHaveBeenCalledOnce()
   })
 
-  it('ruft onFirstSegmentReached wenn Voriges-Segment am ersten Segment geklickt (abgespielt)', async () => {
+  it('verhält sich beim laufenden ersten Segment ebenso zweistufig', async () => {
     const onFirstSegmentReached = vi.fn()
     render(
       <VideoWorkspace {...baseProps} interstitialDuration={0} onFirstSegmentReached={onFirstSegmentReached}>
@@ -1463,17 +1504,20 @@ describe('VideoWorkspace – Bug 3a: onFirstSegmentReached wird am ersten Segmen
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Play' })) })
 
-    Object.defineProperty(videoEl, 'currentTime', { value: 65, configurable: true, writable: true })
+    Object.defineProperty(videoEl, 'currentTime', { value: 60, configurable: true, writable: true })
     act(() => { fireEvent(videoEl, new Event('timeupdate')) })
+
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Voriges Segment' })) })
+
+    expect(document.querySelector('.time-row__current')?.textContent).toBe('01:00')
+    expect(onFirstSegmentReached).not.toHaveBeenCalled()
 
     act(() => { fireEvent.click(screen.getByRole('button', { name: 'Voriges Segment' })) })
 
     expect(onFirstSegmentReached).toHaveBeenCalledOnce()
   })
 
-  it('springt bei Voriges-Segment zwischen Segmenten weiterhin korrekt', () => {
-    // Sicherstellen dass der Fix nur die erste-Segment-Grenze betrifft,
-    // nicht die normale Rückwärts-Navigation zwischen Segmenten.
+  it('startet ein mittleres Segment neu und springt beim zweiten Klick zum vorigen Segment', () => {
     const onFirstSegmentReached = vi.fn()
     render(
       <VideoWorkspace {...baseProps} interstitialDuration={0} onFirstSegmentReached={onFirstSegmentReached}>
@@ -1482,16 +1526,66 @@ describe('VideoWorkspace – Bug 3a: onFirstSegmentReached wird am ersten Segmen
     )
 
     const videoEl = document.querySelector('video')!
-    // Im zweiten Segment (s2: 90–120)
-    Object.defineProperty(videoEl, 'currentTime', { value: 95, configurable: true, writable: true })
+    // Exakt am Anfang des zweiten Segments (s2: 90–120)
+    Object.defineProperty(videoEl, 'currentTime', { value: 90, configurable: true, writable: true })
     act(() => { fireEvent(videoEl, new Event('timeupdate')) })
 
-    // Voriges Segment → soll zu Segment 0 (60 s) springen, NICHT onFirstSegmentReached auslösen
+    // Erster Klick → Anfang des aktuellen zweiten Segments.
     act(() => { fireEvent.click(screen.getByRole('button', { name: 'Voriges Segment' })) })
 
     expect(onFirstSegmentReached).not.toHaveBeenCalled()
-    // Zeitanzeige springt auf 01:00 (=60 s)
+    expect(document.querySelector('.time-row__current')?.textContent).toBe('01:30')
+
+    // Zweiter Klick → Anfang des vorherigen Segments.
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Voriges Segment' })) })
+
     expect(document.querySelector('.time-row__current')?.textContent).toBe('01:00')
+  })
+
+  it('wertet zwei einzelne Linkspfeil-Tastendrücke als Neustart und genau einen Segmentwechsel', () => {
+    render(
+      <VideoWorkspace {...baseProps} interstitialDuration={0}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const videoEl = document.querySelector('video')!
+    Object.defineProperty(videoEl, 'currentTime', { value: 90, configurable: true, writable: true })
+    act(() => { fireEvent(videoEl, new Event('timeupdate')) })
+
+    act(() => { fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft', repeat: false }) })
+    expect(document.querySelector('.time-row__current')?.textContent).toBe('01:30')
+
+    // Vom Gedrückthalten erzeugte Repeat-Events dürfen keine weiteren Segmente überspringen.
+    act(() => { fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft', repeat: true }) })
+    expect(document.querySelector('.time-row__current')?.textContent).toBe('01:30')
+
+    act(() => { fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft', repeat: false }) })
+    expect(document.querySelector('.time-row__current')?.textContent).toBe('01:00')
+  })
+
+  it('behandelt einen erneuten Linkspfeil nach einer Sekunde wieder als Segment-Neustart', () => {
+    vi.useFakeTimers()
+    render(
+      <VideoWorkspace {...baseProps} interstitialDuration={0}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const videoEl = document.querySelector('video')!
+    Object.defineProperty(videoEl, 'currentTime', { value: 90, configurable: true, writable: true })
+    act(() => { fireEvent(videoEl, new Event('timeupdate')) })
+
+    act(() => { fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft', repeat: false }) })
+    act(() => { vi.advanceTimersByTime(1000) })
+    act(() => { fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft', repeat: false }) })
+
+    expect(document.querySelector('.time-row__current')?.textContent).toBe('01:30')
+
+    // Erst der direkt folgende Doppeltipp wechselt genau ein Segment zurück.
+    act(() => { fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft', repeat: false }) })
+    expect(document.querySelector('.time-row__current')?.textContent).toBe('01:00')
+    vi.useRealTimers()
   })
 })
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import type { FullscreenFlyout } from './playerTypes'
 
@@ -10,8 +10,15 @@ export function useFullscreen({ playerPanelRef }: UseFullscreenOptions) {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [hoveredFullscreenFlyout, setHoveredFullscreenFlyout] = useState<FullscreenFlyout | null>(null)
   const [pinnedFullscreenFlyout, setPinnedFullscreenFlyout] = useState<FullscreenFlyout | null>(null)
+  const hoverCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const activeFullscreenFlyout = pinnedFullscreenFlyout ?? hoveredFullscreenFlyout
+
+  const cancelHoverClose = (): void => {
+    if (hoverCloseTimerRef.current === null) return
+    clearTimeout(hoverCloseTimerRef.current)
+    hoverCloseTimerRef.current = null
+  }
 
   useEffect(() => {
     const handleFullscreenChange = (): void => {
@@ -30,10 +37,13 @@ export function useFullscreen({ playerPanelRef }: UseFullscreenOptions) {
 
   useEffect(() => {
     if (!isFullscreen) {
+      cancelHoverClose()
       setHoveredFullscreenFlyout(null)
       setPinnedFullscreenFlyout(null)
     }
   }, [isFullscreen])
+
+  useEffect(() => () => cancelHoverClose(), [])
 
   const toggleFullscreen = async (): Promise<void> => {
     if (!playerPanelRef.current) return
@@ -45,16 +55,22 @@ export function useFullscreen({ playerPanelRef }: UseFullscreenOptions) {
   }
 
   const toggleFullscreenFlyout = (flyout: FullscreenFlyout): void => {
+    cancelHoverClose()
     setHoveredFullscreenFlyout(flyout)
     setPinnedFullscreenFlyout((current) => (current === flyout ? null : flyout))
   }
 
   const handleFullscreenFlyoutMouseEnter = (flyout: FullscreenFlyout): void => {
+    cancelHoverClose()
     setHoveredFullscreenFlyout(flyout)
   }
 
   const handleFullscreenFlyoutMouseLeave = (flyout: FullscreenFlyout): void => {
-    setHoveredFullscreenFlyout((current) => (current === flyout ? null : current))
+    cancelHoverClose()
+    hoverCloseTimerRef.current = setTimeout(() => {
+      setHoveredFullscreenFlyout((current) => (current === flyout ? null : current))
+      hoverCloseTimerRef.current = null
+    }, 240)
   }
 
   return {

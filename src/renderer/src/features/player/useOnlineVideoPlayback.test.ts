@@ -382,6 +382,21 @@ describe('useOnlineVideoPlayback – segment mode', () => {
     expect(mockYtPlayer.seekTo).toHaveBeenCalledWith(10, true)
   })
 
+  it('keeps the current position when enabling segment mode inside a segment', async () => {
+    const { result, fireReady } = await setup({ segments, interstitialDuration: 3 })
+    fireReady()
+    act(() => { result.current.seekTo(15) })
+    mockYtPlayer.seekTo.mockClear()
+
+    await act(async () => { await result.current.startSegmentPlayback() })
+
+    expect(result.current.isSegmentMode).toBe(true)
+    expect(result.current.sequenceIndex).toBe(0)
+    expect(result.current.currentTime).toBe(15)
+    expect(result.current.interstitialSegment).toBeNull()
+    expect(mockYtPlayer.seekTo).not.toHaveBeenCalled()
+  })
+
   it('exitSegmentMode resets isSegmentMode and sequenceIndex', async () => {
     const { result, fireReady } = await setup({ segments })
     fireReady()
@@ -411,6 +426,18 @@ describe('useOnlineVideoPlayback – segment mode', () => {
     act(() => { result.current.jumpToPreviousSegment() })
 
     expect(onFirstSegmentReached).toHaveBeenCalledTimes(1)
+  })
+
+  it('restarts the active segment before navigating to the previous one', async () => {
+    const { result, fireReady } = await setup({ segments })
+    fireReady()
+
+    act(() => { result.current.seekTo(50) }) // exactly at the start of segment 1
+    act(() => { result.current.jumpToPreviousSegment() })
+    expect(mockYtPlayer.seekTo).toHaveBeenLastCalledWith(50, true)
+
+    act(() => { result.current.jumpToPreviousSegment() })
+    expect(mockYtPlayer.seekTo).toHaveBeenLastCalledWith(10, true)
   })
 
   it('calls onSegmentModeChange when segment mode changes', async () => {

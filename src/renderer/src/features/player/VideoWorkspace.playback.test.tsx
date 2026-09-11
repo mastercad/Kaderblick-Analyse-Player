@@ -198,6 +198,7 @@ describe('VideoWorkspace – speed controls', () => {
 
     const video = document.querySelector('video') as HTMLVideoElement
     video.currentTime = 10
+    act(() => { fireEvent.play(video) })
     act(() => { fireEvent.click(screen.getByRole('button', { name: 'Rückwärts' })) })
     act(() => { vi.advanceTimersByTime(1000) })
 
@@ -220,6 +221,7 @@ describe('VideoWorkspace – speed controls', () => {
     let seeking = false
     Object.defineProperty(video, 'seeking', { configurable: true, get: () => seeking })
     video.currentTime = 10
+    act(() => { fireEvent.play(video) })
     act(() => { fireEvent.click(screen.getByRole('button', { name: 'Rückwärts' })) })
     seeking = true
     act(() => { vi.advanceTimersByTime(1000) })
@@ -244,6 +246,253 @@ describe('VideoWorkspace – speed controls', () => {
     act(() => { fireEvent.keyDown(window, { code: 'KeyR', key: 'R', shiftKey: true }) })
 
     expect(screen.getByRole('button', { name: 'Vorwärts' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+  })
+
+  it('keeps playback paused when selecting either direction', () => {
+    render(
+      <VideoWorkspace {...baseProps} selectedVideo={directVideo}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video') as HTMLVideoElement
+    video.currentTime = 10
+    video.play = vi.fn().mockResolvedValue(undefined)
+
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Rückwärts' })) })
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+    expect(video.play).not.toHaveBeenCalled()
+
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Vorwärts' })) })
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+    expect(video.play).not.toHaveBeenCalled()
+  })
+
+  it('does not revive a stopped reverse timer during paused direction changes', () => {
+    vi.useFakeTimers()
+    render(
+      <VideoWorkspace {...baseProps} selectedVideo={directVideo}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video') as HTMLVideoElement
+    video.currentTime = 10
+    act(() => { fireEvent.play(video) })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Rückwärts' })) })
+    act(() => { vi.advanceTimersByTime(100) })
+    act(() => { fireEvent.keyDown(window, { code: 'Space', key: ' ' }) })
+
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Vorwärts' })) })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Rückwärts' })) })
+    const pausedAt = video.currentTime
+    act(() => { vi.advanceTimersByTime(1000) })
+
+    expect(video.currentTime).toBeCloseTo(pausedAt)
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Vorwärts' })).toHaveAttribute('aria-pressed', 'true')
+    vi.useRealTimers()
+  })
+
+  it('can resume after changing reverse speed to three-quarter and half speed', () => {
+    vi.useFakeTimers()
+    render(
+      <VideoWorkspace {...baseProps} selectedVideo={directVideo}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video') as HTMLVideoElement
+    video.currentTime = 10
+    act(() => { fireEvent.play(video) })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Rückwärts' })) })
+    act(() => { fireEvent.click(screen.getByTitle('Geschwindigkeit: ¾×')) })
+    act(() => { fireEvent.click(screen.getByTitle('Geschwindigkeit: ½×')) })
+    act(() => { vi.advanceTimersByTime(250) })
+
+    act(() => { fireEvent.keyDown(window, { code: 'Space', key: ' ' }) })
+    const pausedAt = video.currentTime
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+    act(() => { vi.advanceTimersByTime(250) })
+    expect(video.currentTime).toBeCloseTo(pausedAt)
+
+    act(() => { fireEvent.keyDown(window, { code: 'Space', key: ' ' }) })
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(video.currentTime).toBeLessThan(pausedAt)
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
+    vi.useRealTimers()
+  })
+
+  it('preserves segment mode when switching between reverse and forward', async () => {
+    const onSegmentModeChange = vi.fn()
+    render(
+      <VideoWorkspace
+        {...baseProps}
+        segments={[{
+          id: 'segment-1',
+          sourceVideoName: 'test.mp4',
+          sourceVideoPath: '/tmp/test.mp4',
+          startSeconds: 5,
+          endSeconds: 15,
+          lengthSeconds: 10,
+          title: 'Szene',
+          subTitle: '',
+          audioTrack: '1'
+        }]}
+        interstitialDuration={0}
+        selectedVideo={directVideo}
+        onSegmentModeChange={onSegmentModeChange}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Nur Segmente abspielen' })) })
+    expect(screen.getByRole('button', { name: 'Segmentmodus beenden' })).toHaveAttribute('aria-pressed', 'true')
+    onSegmentModeChange.mockClear()
+
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Rückwärts' })) })
+    expect(screen.getByRole('button', { name: 'Segmentmodus beenden' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Vorwärts' })) })
+    expect(screen.getByRole('button', { name: 'Segmentmodus beenden' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+    expect(onSegmentModeChange).not.toHaveBeenCalledWith(false)
+  })
+
+  it('stops reverse playback at the active segment start and can play forward again', async () => {
+    vi.useFakeTimers()
+    render(
+      <VideoWorkspace
+        {...baseProps}
+        segments={[{
+          id: 'segment-1',
+          sourceVideoName: 'test.mp4',
+          sourceVideoPath: '/tmp/test.mp4',
+          startSeconds: 5,
+          endSeconds: 15,
+          lengthSeconds: 10,
+          title: 'Szene',
+          subTitle: '',
+          audioTrack: '1'
+        }]}
+        interstitialDuration={0}
+        selectedVideo={directVideo}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video') as HTMLVideoElement
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Nur Segmente abspielen' })) })
+    video.currentTime = 7
+    act(() => { fireEvent(video, new Event('timeupdate')) })
+    act(() => { fireEvent.play(video) })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Rückwärts' })) })
+    act(() => { vi.advanceTimersByTime(3000) })
+
+    expect(video.currentTime).toBe(5)
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Segmentmodus beenden' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Rückwärts' })).toHaveAttribute('aria-pressed', 'false')
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Play' })) })
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
+    vi.useRealTimers()
+  })
+
+  it('uses Space only for resume/pause and preserves reverse direction while the direction button has focus', () => {
+    vi.useFakeTimers()
+    render(
+      <VideoWorkspace {...baseProps} selectedVideo={directVideo}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video') as HTMLVideoElement
+    video.currentTime = 10
+    const directionButton = screen.getByRole('button', { name: 'Rückwärts' })
+    act(() => { directionButton.focus() })
+    act(() => { fireEvent.click(directionButton) })
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(video.currentTime).toBe(10)
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+
+    act(() => {
+      fireEvent.keyDown(directionButton, { code: 'Space', key: ' ' })
+      fireEvent.keyUp(directionButton, { code: 'Space', key: ' ' })
+    })
+    expect(screen.getByRole('button', { name: 'Vorwärts' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
+    act(() => { vi.advanceTimersByTime(500) })
+    const pausedAt = video.currentTime
+    expect(pausedAt).toBeLessThan(10)
+
+    act(() => {
+      fireEvent.keyDown(directionButton, { code: 'Space', key: ' ' })
+      fireEvent.keyUp(directionButton, { code: 'Space', key: ' ' })
+    })
+    expect(screen.getByRole('button', { name: 'Vorwärts' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(video.currentTime).toBeCloseTo(pausedAt)
+    vi.useRealTimers()
+  })
+
+  it('derives the Play/Pause label from native video playback events', () => {
+    render(
+      <VideoWorkspace {...baseProps} selectedVideo={directVideo}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video') as HTMLVideoElement
+    act(() => { fireEvent.play(video) })
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
+
+    act(() => { fireEvent.pause(video) })
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+  })
+
+  it('rejects a delayed native play after switching directions while paused', async () => {
+    render(
+      <VideoWorkspace {...baseProps} selectedVideo={directVideo}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video') as HTMLVideoElement
+    video.currentTime = 10
+    let resolvePlay: (() => void) | undefined
+    video.play = vi.fn()
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { resolvePlay = resolve }))
+      .mockResolvedValue(undefined)
+    video.pause = vi.fn()
+
+    // Start forward playback, but keep its asynchronous play() request pending.
+    act(() => { fireEvent.keyDown(window, { code: 'Space', key: ' ' }) })
+    // Select reverse and then forward again while that old request is still unresolved.
+    // Both direction changes must preserve the currently paused transport state.
+    act(() => { fireEvent.keyDown(window, { code: 'KeyR', key: 'R', shiftKey: true }) })
+    act(() => { fireEvent.keyDown(window, { code: 'KeyR', key: 'R', shiftKey: true }) })
+    const pauseCallsBeforeDelayedPlay = vi.mocked(video.pause).mock.calls.length
+
+    // The browser may deliver the old play event only after the direction is forward again.
+    // It must be actively rejected instead of reviving playback and changing the button to Pause.
+    act(() => { fireEvent.play(video) })
+    await act(async () => {
+      resolvePlay?.()
+      await Promise.resolve()
+    })
+
+    expect(video.pause).toHaveBeenCalledTimes(pauseCallsBeforeDelayedPlay + 2)
+    expect(screen.getByRole('button', { name: 'Rückwärts' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+
+    await act(async () => { fireEvent.keyDown(window, { code: 'Space', key: ' ' }) })
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
   })
 
   it('activates the clicked playback-rate button (aria-pressed=true)', () => {

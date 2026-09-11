@@ -183,6 +183,17 @@ export function VideoWorkspace({
   useEffect(() => {
     if (!isFullscreen) setKeyboardHud(null)
   }, [isFullscreen])
+
+  // A closed flyout must not retain focus. Otherwise Space can activate or scroll
+  // controls that have already been moved outside the fullscreen viewport.
+  useEffect(() => {
+    const focusedElement = document.activeElement
+    if (!(focusedElement instanceof HTMLElement)) return
+    const focusedFlyout = focusedElement.closest('.fullscreen-flyout-panel')
+    if (focusedFlyout && !focusedFlyout.classList.contains('fullscreen-flyout-panel--open')) {
+      focusedElement.blur()
+    }
+  }, [activeFullscreenFlyout])
   useEffect(() => setReversePlaybackError(null), [selectedVideo?.path])
   const prevIsFullscreenRef = useRef(false)
   useEffect(() => {
@@ -204,6 +215,16 @@ export function VideoWorkspace({
 
   // Global keyboard shortcuts
   const onKeyboardShortcut = useEffectEvent((event: KeyboardEvent): void => {
+    if (event.code === 'Space') {
+      event.preventDefault()
+      event.stopPropagation()
+      if (!event.repeat) {
+        showKeyboardHud((playback.isPlaying || playback.isInterstitialCounting) ? 'Ⅱ' : '▶', (playback.isPlaying || playback.isInterstitialCounting) ? 'Angehalten' : 'Fortgesetzt')
+        void playback.togglePlayPause()
+      }
+      return
+    }
+
     const target = event.target as HTMLElement | null
     const isRangeInput = target instanceof HTMLInputElement && target.type === 'range'
     const isTyping =
@@ -217,9 +238,8 @@ export function VideoWorkspace({
     // Arrow keys on range inputs control the slider — don't intercept them
     if (isRangeInput && (event.code === 'ArrowLeft' || event.code === 'ArrowRight')) return
 
-    if (event.code === 'Space') { event.preventDefault(); showKeyboardHud((playback.isPlaying || playback.isInterstitialCounting) ? 'Ⅱ' : '▶', (playback.isPlaying || playback.isInterstitialCounting) ? 'Angehalten' : 'Fortgesetzt'); void playback.togglePlayPause() }
-    if (event.code === 'ArrowLeft' && !event.shiftKey) { event.preventDefault(); showKeyboardHud('‹', 'Voriges Segment'); playback.jumpToPreviousSegment() }
-    if (event.code === 'ArrowRight' && !event.shiftKey) { event.preventDefault(); showKeyboardHud('›', 'Nächstes Segment'); playback.jumpToNextSegment() }
+    if (event.code === 'ArrowLeft' && !event.shiftKey) { event.preventDefault(); if (!event.repeat) { showKeyboardHud('‹', 'Voriges Segment'); playback.jumpToPreviousSegment() } }
+    if (event.code === 'ArrowRight' && !event.shiftKey) { event.preventDefault(); if (!event.repeat) { showKeyboardHud('›', 'Nächstes Segment'); playback.jumpToNextSegment() } }
     if (event.code === 'ArrowLeft' && event.shiftKey) { event.preventDefault(); showKeyboardHud('↶', 'Zurückgesprungen', `${SEEK_STEP_SECONDS} s`); playback.jumpBySeconds(-SEEK_STEP_SECONDS) }
     if (event.code === 'ArrowRight' && event.shiftKey) { event.preventDefault(); showKeyboardHud('↷', 'Vorgesprungen', `${SEEK_STEP_SECONDS} s`); playback.jumpBySeconds(SEEK_STEP_SECONDS) }
     if (event.key === ',') { event.preventDefault(); showKeyboardHud('‹', 'Ein Bild zurück', '1 Frame'); playback.stepFrame('backward') }
@@ -263,8 +283,17 @@ export function VideoWorkspace({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => onKeyboardShortcut(event)
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    const suppressSpaceActivation = (event: KeyboardEvent): void => {
+      if (event.code !== 'Space') return
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    window.addEventListener('keyup', suppressSpaceActivation, true)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      window.removeEventListener('keyup', suppressSpaceActivation, true)
+    }
   }, [])
 
   const handleTimelineSeek = (nextTimeSeconds: number): void => {
@@ -610,18 +639,18 @@ export function VideoWorkspace({
 
   const fullscreenFlyouts = isFullscreen ? (
     <div className="fullscreen-flyouts" data-testid="fullscreen-flyout-shell">
-      <button aria-controls="fullscreen-flyout-top" aria-expanded={activeFullscreenFlyout === 'top'} aria-label="Info einblenden" className="fullscreen-edge-trigger fullscreen-edge-trigger--top" type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('top')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('top')} onFocus={() => handleFullscreenFlyoutMouseEnter('top')} onBlur={() => handleFullscreenFlyoutMouseLeave('top')} onClick={() => toggleFullscreenFlyout('top')}>Info</button>
-      <div className={`fullscreen-flyout-panel fullscreen-flyout-panel--top ${activeFullscreenFlyout === 'top' ? 'fullscreen-flyout-panel--open' : ''}`} id="fullscreen-flyout-top" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('top')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('top')}>
+      <button aria-controls="fullscreen-flyout-top" aria-expanded={activeFullscreenFlyout === 'top'} aria-label={`Info ${activeFullscreenFlyout === 'top' ? 'ausblenden' : 'einblenden'}`} className="fullscreen-edge-trigger fullscreen-edge-trigger--top" type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('top')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('top')} onFocus={() => handleFullscreenFlyoutMouseEnter('top')} onBlur={() => handleFullscreenFlyoutMouseLeave('top')} onClick={() => toggleFullscreenFlyout('top')}>Info</button>
+      <div aria-hidden={activeFullscreenFlyout !== 'top'} className={`fullscreen-flyout-panel fullscreen-flyout-panel--top ${activeFullscreenFlyout === 'top' ? 'fullscreen-flyout-panel--open' : ''}`} id="fullscreen-flyout-top" inert={activeFullscreenFlyout !== 'top'} onMouseEnter={() => handleFullscreenFlyoutMouseEnter('top')} onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) handleFullscreenFlyoutMouseLeave('top') }} onFocus={() => handleFullscreenFlyoutMouseEnter('top')} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) handleFullscreenFlyoutMouseLeave('top') }}>
         <div className="fullscreen-card">{playerHeader}{assistRow}{playbackHint}</div>
       </div>
 
-      <button aria-controls="fullscreen-flyout-left" aria-expanded={activeFullscreenFlyout === 'left'} aria-label="Segmente einblenden" className="fullscreen-edge-trigger fullscreen-edge-trigger--left" type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('left')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('left')} onFocus={() => handleFullscreenFlyoutMouseEnter('left')} onBlur={() => handleFullscreenFlyoutMouseLeave('left')} onClick={() => toggleFullscreenFlyout('left')}>Segmente</button>
-      <div className={`fullscreen-flyout-panel fullscreen-flyout-panel--left ${activeFullscreenFlyout === 'left' ? 'fullscreen-flyout-panel--open' : ''}`} id="fullscreen-flyout-left" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('left')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('left')}>
+      <button aria-controls="fullscreen-flyout-left" aria-expanded={activeFullscreenFlyout === 'left'} aria-label={`Segmente ${activeFullscreenFlyout === 'left' ? 'ausblenden' : 'einblenden'}`} className="fullscreen-edge-trigger fullscreen-edge-trigger--left" type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('left')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('left')} onFocus={() => handleFullscreenFlyoutMouseEnter('left')} onBlur={() => handleFullscreenFlyoutMouseLeave('left')} onClick={() => toggleFullscreenFlyout('left')}>Segmente</button>
+      <div aria-hidden={activeFullscreenFlyout !== 'left'} className={`fullscreen-flyout-panel fullscreen-flyout-panel--left ${activeFullscreenFlyout === 'left' ? 'fullscreen-flyout-panel--open' : ''}`} id="fullscreen-flyout-left" inert={activeFullscreenFlyout !== 'left'} onMouseEnter={() => handleFullscreenFlyoutMouseEnter('left')} onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) handleFullscreenFlyoutMouseLeave('left') }} onFocus={() => handleFullscreenFlyoutMouseEnter('left')} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) handleFullscreenFlyoutMouseLeave('left') }}>
         {segmentList}
       </div>
 
-      <button aria-controls="fullscreen-flyout-right" aria-expanded={activeFullscreenFlyout === 'right'} aria-label="Werkzeuge einblenden" className="fullscreen-edge-trigger fullscreen-edge-trigger--right" type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('right')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('right')} onFocus={() => handleFullscreenFlyoutMouseEnter('right')} onBlur={() => handleFullscreenFlyoutMouseLeave('right')} onClick={() => toggleFullscreenFlyout('right')}>Werkzeuge</button>
-      <div className={`fullscreen-flyout-panel fullscreen-flyout-panel--right ${activeFullscreenFlyout === 'right' ? 'fullscreen-flyout-panel--open' : ''}`} data-testid="fullscreen-flyout-right-panel" id="fullscreen-flyout-right" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('right')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('right')}>
+      <button aria-controls="fullscreen-flyout-right" aria-expanded={activeFullscreenFlyout === 'right'} aria-label={`Werkzeuge ${activeFullscreenFlyout === 'right' ? 'ausblenden' : 'einblenden'}`} className="fullscreen-edge-trigger fullscreen-edge-trigger--right" type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('right')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('right')} onFocus={() => handleFullscreenFlyoutMouseEnter('right')} onBlur={() => handleFullscreenFlyoutMouseLeave('right')} onClick={() => toggleFullscreenFlyout('right')}>Werkzeuge</button>
+      <div aria-hidden={activeFullscreenFlyout !== 'right'} className={`fullscreen-flyout-panel fullscreen-flyout-panel--right ${activeFullscreenFlyout === 'right' ? 'fullscreen-flyout-panel--open' : ''}`} data-testid="fullscreen-flyout-right-panel" id="fullscreen-flyout-right" inert={activeFullscreenFlyout !== 'right'} onMouseEnter={() => handleFullscreenFlyoutMouseEnter('right')} onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) handleFullscreenFlyoutMouseLeave('right') }} onFocus={() => handleFullscreenFlyoutMouseEnter('right')} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) handleFullscreenFlyoutMouseLeave('right') }}>
         <div className="fullscreen-card fullscreen-card--stacked">
           <div className="fullscreen-exit-row">
             <button
@@ -652,8 +681,8 @@ export function VideoWorkspace({
         </div>
       </div>
 
-      <button aria-controls="fullscreen-flyout-bottom" aria-expanded={activeFullscreenFlyout === 'bottom'} aria-label="Wiedergabe und Timeline einblenden" className="fullscreen-edge-trigger fullscreen-edge-trigger--bottom" type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('bottom')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('bottom')} onFocus={() => handleFullscreenFlyoutMouseEnter('bottom')} onBlur={() => handleFullscreenFlyoutMouseLeave('bottom')} onClick={() => toggleFullscreenFlyout('bottom')}>Steuerung</button>
-      <div className={`fullscreen-flyout-panel fullscreen-flyout-panel--bottom ${activeFullscreenFlyout === 'bottom' ? 'fullscreen-flyout-panel--open' : ''}`} id="fullscreen-flyout-bottom" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('bottom')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('bottom')}>
+      <button aria-controls="fullscreen-flyout-bottom" aria-expanded={activeFullscreenFlyout === 'bottom'} aria-label={`Wiedergabe und Timeline ${activeFullscreenFlyout === 'bottom' ? 'ausblenden' : 'einblenden'}`} className="fullscreen-edge-trigger fullscreen-edge-trigger--bottom" type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('bottom')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('bottom')} onFocus={() => handleFullscreenFlyoutMouseEnter('bottom')} onBlur={() => handleFullscreenFlyoutMouseLeave('bottom')} onClick={() => toggleFullscreenFlyout('bottom')}>Steuerung</button>
+      <div aria-hidden={activeFullscreenFlyout !== 'bottom'} className={`fullscreen-flyout-panel fullscreen-flyout-panel--bottom ${activeFullscreenFlyout === 'bottom' ? 'fullscreen-flyout-panel--open' : ''}`} id="fullscreen-flyout-bottom" inert={activeFullscreenFlyout !== 'bottom'} onMouseEnter={() => handleFullscreenFlyoutMouseEnter('bottom')} onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) handleFullscreenFlyoutMouseLeave('bottom') }} onFocus={() => handleFullscreenFlyoutMouseEnter('bottom')} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) handleFullscreenFlyoutMouseLeave('bottom') }}>
         <div className="fullscreen-card fullscreen-card--stacked">
           <div className="player-controls player-controls--fullscreen">{transportControls}</div>
           {frameNavControls}
@@ -722,8 +751,8 @@ export function VideoWorkspace({
                         onError={playback.handleVideoError}
                         onTimeUpdate={playback.handleTimeUpdate}
                         onSeeked={playback.handleSeeked}
-                        onPause={() => {}}
-                        onPlay={() => {}}
+                        onPause={playback.handleVideoPause}
+                        onPlay={playback.handleVideoPlay}
                         onEnded={playback.handleVideoEnded}
                       />
                     )}

@@ -3,7 +3,7 @@ import type { RefObject } from 'react'
 import { findActiveSegmentIndex, getNextSegmentIndex, getPreviousSegmentIndex, resolveSegmentSequenceStartIndex } from '../../../../common/segmentUtils'
 import { getSegmentPlaybackTransition } from '../../../../common/segmentPlayback'
 import type { Segment, VideoFileDescriptor } from '../../../../common/types'
-import { PLAYBACK_RATES } from './playerTypes'
+import { PLAYBACK_RATES, PREVIOUS_SEGMENT_REPEAT_WINDOW_MS } from './playerTypes'
 
 // ─── Module-level API loading ─────────────────────────────────────────────────
 
@@ -123,6 +123,7 @@ export function useOnlineVideoPlayback({
   const [interstitialCountdownKey, setInterstitialCountdownKey] = useState(0)
 
   const playerRef = useRef<NormalisedPlayer | null>(null)
+  const previousSegmentRestartRef = useRef<{ segmentIndex: number; expiresAt: number } | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const isInterstitialActiveRef = useRef(false)
   const interstitialTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -234,6 +235,7 @@ export function useOnlineVideoPlayback({
   }
 
   const seekTo = (nextTimeSeconds: number): void => {
+    previousSegmentRestartRef.current = null
     playerRef.current?.seekTo(nextTimeSeconds)
     currentTimeRef.current = nextTimeSeconds
     setCurrentTime(nextTimeSeconds)
@@ -593,6 +595,25 @@ export function useOnlineVideoPlayback({
   }
 
   const jumpToPreviousSegment = (): void => {
+    const activeIndex = findActiveSegmentIndex(segmentsRef.current, currentTimeRef.current)
+    if (activeIndex >= 0) {
+      const previousRestart = previousSegmentRestartRef.current
+      if (previousRestart?.segmentIndex === activeIndex && Date.now() <= previousRestart.expiresAt) {
+        previousSegmentRestartRef.current = null
+        if (activeIndex > 0) jumpToSegment(activeIndex - 1, false, true)
+        else onFirstSegmentReached?.()
+        return
+      }
+
+      jumpToSegment(activeIndex)
+      previousSegmentRestartRef.current = {
+        segmentIndex: activeIndex,
+        expiresAt: Date.now() + PREVIOUS_SEGMENT_REPEAT_WINDOW_MS
+      }
+      return
+    }
+
+    previousSegmentRestartRef.current = null
     const previousIndex = getPreviousSegmentIndex(segments, currentTimeRef.current)
     if (previousIndex >= 0) {
       jumpToSegment(previousIndex, false, true)
@@ -637,13 +658,17 @@ export function useOnlineVideoPlayback({
 
   const startSegmentPlayback = async (forceAutoPlay = false): Promise<void> => {
     let startIndex: number
+    let mustJumpToSegmentStart = true
     if (pendingStartFromLastSegmentRef.current) {
       pendingStartFromLastSegmentRef.current = false
       startIndex = segments.length > 0 ? segments.length - 1 : 0
     } else {
+      const effectiveCurrentTime = currentTimeRef.current
+      const currentSegmentIndex = findActiveSegmentIndex(segments, effectiveCurrentTime)
       startIndex = repeatSingleSegment && activeSegmentIndex >= 0
         ? activeSegmentIndex
-        : resolveSegmentSequenceStartIndex(segments, currentTimeRef.current)
+        : resolveSegmentSequenceStartIndex(segments, effectiveCurrentTime)
+      mustJumpToSegmentStart = currentSegmentIndex !== startIndex
     }
     if (startIndex < 0) return
 
@@ -652,6 +677,12 @@ export function useOnlineVideoPlayback({
     isSegmentModeRef.current = true
     setSequenceIndex(startIndex)
     sequenceIndexRef.current = startIndex
+
+    // Keep the current frame when segment mode is enabled inside this segment.
+    if (!mustJumpToSegmentStart) {
+      if (forceAutoPlay && !isPlayingRef.current) playPlayback()
+      return
+    }
 
     if (interstitialDuration > 0) {
       const segment = segments[startIndex]
@@ -714,6 +745,8 @@ export function useOnlineVideoPlayback({
     handleMetadataLoaded: (): void => { /* not applicable */ },
     handleCanPlay: (): void => { /* not applicable */ },
     handleVideoError: (): void => { /* not applicable */ },
+    handleVideoPlay: (): void => { /* handled via player API */ },
+    handleVideoPause: (): void => { /* handled via player API */ },
     handleVideoEnded: (): void => { /* not applicable */ }
   }
 }
