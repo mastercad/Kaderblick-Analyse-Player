@@ -440,6 +440,26 @@ describe('useOnlineVideoPlayback – segment mode', () => {
     expect(mockYtPlayer.seekTo).toHaveBeenLastCalledWith(10, true)
   })
 
+  it('uses segments as navigation markers outside segment mode and a quick second press goes back once more', async () => {
+    const spacedSegments = [
+      { ...segments[0], id: 'a', startSeconds: 10, endSeconds: 20 },
+      { ...segments[0], id: 'b', startSeconds: 40, endSeconds: 50 },
+      { ...segments[0], id: 'c', startSeconds: 70, endSeconds: 80 }
+    ]
+    const { result, fireReady } = await setup({ segments: spacedSegments })
+    fireReady()
+
+    act(() => { result.current.seekTo(60) })
+    expect(result.current.isSegmentMode).toBe(false)
+
+    act(() => { result.current.jumpToPreviousSegment() })
+    expect(mockYtPlayer.seekTo).toHaveBeenLastCalledWith(40, true)
+
+    act(() => { result.current.jumpToPreviousSegment() })
+    expect(mockYtPlayer.seekTo).toHaveBeenLastCalledWith(10, true)
+    expect(result.current.isSegmentMode).toBe(false)
+  })
+
   it('calls onSegmentModeChange when segment mode changes', async () => {
     const { result, onSegmentModeChange, fireReady } = await setup({ segments })
     fireReady()

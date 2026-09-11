@@ -54,6 +54,16 @@ interface KeyboardHudMessage {
   value?: string
 }
 
+const fullscreenOrientationStorageKey = 'kaderblick-fullscreen-orientation-visible'
+
+function FlyoutPinIndicator() {
+  return (
+    <svg aria-hidden="true" className="fullscreen-edge-trigger__pin" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 2.5h6M6 2.5v4l-2 2h8l-2-2v-4M8 8.5v5" />
+    </svg>
+  )
+}
+
 export function VideoWorkspace({
   selectedVideo,
   segments,
@@ -101,8 +111,8 @@ export function VideoWorkspace({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const { isFullscreen, activeFullscreenFlyout, setPinnedFullscreenFlyout,
-    toggleFullscreen, toggleFullscreenFlyout,
+  const { isFullscreen, activeFullscreenFlyout, pinnedFullscreenFlyout,
+    toggleFullscreen, toggleFullscreenFlyout, closeUnpinnedFullscreenFlyout,
     handleFullscreenFlyoutMouseEnter, handleFullscreenFlyoutMouseLeave
   } = useFullscreen({ playerPanelRef })
 
@@ -162,6 +172,10 @@ export function VideoWorkspace({
   const [matchTimeError, setMatchTimeError] = useState<string | null>(null)
   const [reversePlaybackError, setReversePlaybackError] = useState<string | null>(null)
   const [keyboardHud, setKeyboardHud] = useState<KeyboardHudMessage | null>(null)
+  const [fullscreenOrientationVisible, setFullscreenOrientationVisible] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return window.localStorage.getItem(fullscreenOrientationStorageKey) !== 'false'
+  })
   const keyboardHudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const keyboardHudSequenceRef = useRef(0)
 
@@ -183,6 +197,10 @@ export function VideoWorkspace({
   useEffect(() => {
     if (!isFullscreen) setKeyboardHud(null)
   }, [isFullscreen])
+
+  useEffect(() => {
+    window.localStorage.setItem(fullscreenOrientationStorageKey, String(fullscreenOrientationVisible))
+  }, [fullscreenOrientationVisible])
 
   // A closed flyout must not retain focus. Otherwise Space can activate or scroll
   // controls that have already been moved outside the fullscreen viewport.
@@ -207,11 +225,14 @@ export function VideoWorkspace({
     }
   }, [isFullscreen, playback.isPlaying, playback.isInterstitialCounting])
 
-  // Pin the right flyout when a video error or recovery occurs in fullscreen
-  useEffect(() => {
-    if (!isFullscreen || (!playback.videoError && !playbackRecoveryInProgress)) return
-    setPinnedFullscreenFlyout('right')
-  }, [isFullscreen, playbackRecoveryInProgress, playback.videoError])
+  const jumpToKickoff = (): void => {
+    if (selectedVideo?.kickoffVideoSeconds === undefined || selectedVideo.matchHalf === undefined) {
+      showKeyboardHud('A', 'Anstoß nicht festgelegt')
+      return
+    }
+    playback.seekTo(selectedVideo.kickoffVideoSeconds)
+    showKeyboardHud('A', 'Anstoß', selectedVideo.matchHalf === 2 ? 'Spielzeit 45:00' : 'Spielzeit 00:00')
+  }
 
   // Global keyboard shortcuts
   const onKeyboardShortcut = useEffectEvent((event: KeyboardEvent): void => {
@@ -238,7 +259,15 @@ export function VideoWorkspace({
     // Arrow keys on range inputs control the slider — don't intercept them
     if (isRangeInput && (event.code === 'ArrowLeft' || event.code === 'ArrowRight')) return
 
-    if (event.code === 'ArrowLeft' && !event.shiftKey) { event.preventDefault(); if (!event.repeat) { showKeyboardHud('‹', 'Voriges Segment'); playback.jumpToPreviousSegment() } }
+    if (event.code === 'ArrowLeft' && !event.shiftKey) {
+      event.preventDefault()
+      if (!event.repeat) {
+        const result = playback.jumpToPreviousSegment()
+        if (result === 'segment-start') showKeyboardHud('↤', 'Segmentanfang')
+        else if (result === 'previous-segment') showKeyboardHud('‹', 'Voriges Segment')
+        else showKeyboardHud('│‹', 'Erstes Segment erreicht')
+      }
+    }
     if (event.code === 'ArrowRight' && !event.shiftKey) { event.preventDefault(); if (!event.repeat) { showKeyboardHud('›', 'Nächstes Segment'); playback.jumpToNextSegment() } }
     if (event.code === 'ArrowLeft' && event.shiftKey) { event.preventDefault(); showKeyboardHud('↶', 'Zurückgesprungen', `${SEEK_STEP_SECONDS} s`); playback.jumpBySeconds(-SEEK_STEP_SECONDS) }
     if (event.code === 'ArrowRight' && event.shiftKey) { event.preventDefault(); showKeyboardHud('↷', 'Vorgesprungen', `${SEEK_STEP_SECONDS} s`); playback.jumpBySeconds(SEEK_STEP_SECONDS) }
@@ -260,25 +289,65 @@ export function VideoWorkspace({
       showKeyboardHud('▶', 'Schneller', formatRate(nextRate))
       playback.adjustPlaybackRate('faster')
     }
+    if (event.code === 'KeyA') {
+      event.preventDefault()
+      if (!event.repeat) jumpToKickoff()
+    }
     if (event.code === 'KeyN') {
       event.preventDefault()
+      if (event.repeat) return
+      if (segments.length === 0) {
+        showKeyboardHud('N', 'Keine Segmente verfügbar')
+        return
+      }
+      showKeyboardHud('N', playback.isSegmentMode ? 'Segmentmodus beendet' : 'Segmentmodus aktiv')
       if (playback.isSegmentMode) playback.exitSegmentMode()
       else void playback.startSegmentPlayback()
     }
-    if (event.code === 'KeyF') { event.preventDefault(); onToggleFilterOverlay() }
-    if (event.code === 'KeyR' && !event.shiftKey) { event.preventDefault(); onRepeatSingleSegmentChange(!repeatSingleSegment) }
+    if (event.code === 'KeyF') {
+      event.preventDefault()
+      if (event.repeat) return
+      showKeyboardHud('F', filterOverlayVisible ? 'Filter ausgeblendet' : 'Filter eingeblendet')
+      onToggleFilterOverlay()
+    }
+    if (event.code === 'KeyR' && !event.shiftKey) {
+      event.preventDefault()
+      if (event.repeat) return
+      showKeyboardHud('R', repeatSingleSegment ? 'Wiederholung aus' : 'Wiederholung aktiv')
+      onRepeatSingleSegmentChange(!repeatSingleSegment)
+    }
     if (event.code === 'KeyR' && event.shiftKey) {
       event.preventDefault()
+      if (event.repeat) return
       const error = playback.toggleReversePlayback()
       setReversePlaybackError(error)
       if (error === null) showKeyboardHud(playback.isReversing ? '▶' : '◀', playback.isReversing ? 'Vorwärtswiedergabe' : 'Rückwärtswiedergabe', formatRate(playback.playbackRate))
+      else showKeyboardHud('!', 'Rückwärts nicht verfügbar')
     }
     if (event.code === 'F11') { event.preventDefault(); void toggleFullscreen() }
     if (event.code === 'Equal' || event.code === 'NumpadAdd') { event.preventDefault(); if (!playback.interstitialSegment) { const next = Math.min(MAX_ZOOM_LEVEL, zoom.zoomLevel + ZOOM_STEP); showKeyboardHud('+', 'Vergrößert', formatRate(next)); zoom.zoomToViewportPoint(next) } }
     if (event.code === 'Minus' || event.code === 'NumpadSubtract') { event.preventDefault(); if (!playback.interstitialSegment) { const next = Math.max(MIN_ZOOM_LEVEL, zoom.zoomLevel - ZOOM_STEP); showKeyboardHud('−', 'Verkleinert', formatRate(next)); zoom.zoomToViewportPoint(next) } }
     if (event.code === 'Digit0' || event.code === 'Numpad0') { event.preventDefault(); if (!playback.interstitialSegment) { showKeyboardHud('↺', 'Zoom zurückgesetzt', formatRate(MIN_ZOOM_LEVEL)); zoom.resetZoom() } }
-    if (event.code === 'KeyZ') { event.preventDefault(); zoom.setShowZoomDock(prev => !prev) }
-    if (event.code === 'KeyM') { event.preventDefault(); playback.setUserMuted(prev => !prev) }
+    if (event.code === 'KeyZ') {
+      event.preventDefault()
+      if (event.repeat) return
+      showKeyboardHud('Z', zoom.showZoomDock ? 'Zoomsteuerung ausgeblendet' : 'Zoomsteuerung eingeblendet')
+      zoom.setShowZoomDock(prev => !prev)
+    }
+    if (event.code === 'KeyM') {
+      event.preventDefault()
+      if (event.repeat) return
+      showKeyboardHud('M', playback.segmentMuted ? 'Ton im Segment deaktiviert' : playback.userMuted ? 'Ton eingeschaltet' : 'Ton ausgeschaltet')
+      playback.setUserMuted(prev => !prev)
+    }
+    if (event.code === 'KeyT') {
+      event.preventDefault()
+      if (event.repeat) return
+      setFullscreenOrientationVisible((visible) => {
+        showKeyboardHud('T', visible ? 'Zeitinfo ausgeblendet' : 'Zeitinfo eingeblendet')
+        return !visible
+      })
+    }
   })
 
   useEffect(() => {
@@ -325,6 +394,16 @@ export function VideoWorkspace({
   const currentMatchTime = hasMatchClock
     ? videoTimeToMatchTime(playback.currentTime, selectedVideo.kickoffVideoSeconds!, selectedVideo.matchHalf!)
     : null
+  const orientationSegmentIndex = playback.activeSegmentIndex >= 0
+    ? playback.activeSegmentIndex
+    : findActiveSegmentIndex(segments, playback.currentTime)
+  const orientationSegment = orientationSegmentIndex >= 0 ? segments[orientationSegmentIndex] : undefined
+  const orientationSegmentRemaining = orientationSegment
+    ? Math.max(0, orientationSegment.endSeconds - playback.currentTime)
+    : 0
+  const segmentsAfterCurrent = orientationSegmentIndex >= 0
+    ? Math.max(0, segments.length - orientationSegmentIndex - 1)
+    : segments.length
   const handleMatchTimeSeek = (event: React.FormEvent): void => {
     event.preventDefault()
     if (!selectedVideo || !hasMatchClock) return
@@ -376,11 +455,11 @@ export function VideoWorkspace({
         onClick={() => playback.isSegmentMode ? playback.exitSegmentMode() : void playback.startSegmentPlayback()}
         disabled={!selectedVideo || segments.length === 0}
         aria-pressed={playback.isSegmentMode}
-        title={playback.isSegmentMode ? 'Segmentmodus beenden (N)' : 'Segmente der Reihe nach abspielen (N)'}
+        title={playback.isSegmentMode ? 'Wieder das vollständige Video abspielen (N)' : 'Nur die vorhandenen Segmente der Reihe nach abspielen (N)'}
       >
         {playback.isSegmentMode ? 'Segmentmodus beenden' : 'Nur Segmente abspielen'}
       </button>
-      <button className="button" type="button" onClick={playback.jumpToPreviousSegment} disabled={segments.length === 0} title="Voriges Segment (←)">
+      <button className="button" type="button" onClick={playback.jumpToPreviousSegment} disabled={segments.length === 0} title="Zum Segmentanfang; erneut drücken für das vorige Segment (←)">
         Voriges Segment
       </button>
       <button className="button" type="button" onClick={playback.jumpToNextSegment} disabled={segments.length === 0} title="Nächstes Segment (→)">
@@ -401,12 +480,12 @@ export function VideoWorkspace({
   const frameNavControls = (
     <div className="controls-row frame-nav-controls" role="group" aria-label="Bildnavigation">
       <span className="frame-nav-controls__label">Bildnavigation</span>
-      <button className="button button--subtle frame-nav-controls__btn" type="button" onClick={() => playback.jumpBySeconds(-SEEK_STEP_SECONDS)} disabled={!selectedVideo} title={`${SEEK_STEP_SECONDS} Sekunden zurück (Shift+←)`}>&laquo;&thinsp;{SEEK_STEP_SECONDS}s</button>
-      <button className="button button--subtle frame-nav-controls__btn" type="button" onClick={() => playback.stepFrame('backward')} disabled={!selectedVideo} title="Ein Bild zurück (,)">&#x23EE;</button>
-      <button className="button button--subtle frame-nav-controls__btn" type="button" onClick={() => playback.stepFrame('forward')} disabled={!selectedVideo} title="Ein Bild vor (.)">&#x23ED;</button>
-      <button className="button button--subtle frame-nav-controls__btn" type="button" onClick={() => playback.jumpBySeconds(SEEK_STEP_SECONDS)} disabled={!selectedVideo} title={`${SEEK_STEP_SECONDS} Sekunden vor (Shift+→)`}>{SEEK_STEP_SECONDS}s&thinsp;&raquo;</button>
-      <button className="button button--subtle frame-nav-controls__btn" type="button" onClick={playback.jumpToPreviousKeyframe} disabled={!selectedVideo || playback.keyframeTimes.length === 0} title="Zum vorherigen Keyframe ([)">&#x23EE;&#x25CE;</button>
-      <button className="button button--subtle frame-nav-controls__btn" type="button" onClick={playback.jumpToNextKeyframe} disabled={!selectedVideo || playback.keyframeTimes.length === 0} title="Zum nächsten Keyframe (])">&#x25CE;&#x23ED;</button>
+      <button aria-label={`${SEEK_STEP_SECONDS} Sekunden zurück`} className="button button--subtle frame-nav-controls__btn" type="button" onClick={() => playback.jumpBySeconds(-SEEK_STEP_SECONDS)} disabled={!selectedVideo} title={`${SEEK_STEP_SECONDS} Sekunden zurück (Shift+←)`}>−{SEEK_STEP_SECONDS}s</button>
+      <button aria-label="Ein Bild zurück" className="button button--subtle frame-nav-controls__btn" type="button" onClick={() => playback.stepFrame('backward')} disabled={!selectedVideo} title="Ein Bild zurück (,)">│‹</button>
+      <button aria-label="Ein Bild vor" className="button button--subtle frame-nav-controls__btn" type="button" onClick={() => playback.stepFrame('forward')} disabled={!selectedVideo} title="Ein Bild vor (.)">›│</button>
+      <button aria-label={`${SEEK_STEP_SECONDS} Sekunden vor`} className="button button--subtle frame-nav-controls__btn" type="button" onClick={() => playback.jumpBySeconds(SEEK_STEP_SECONDS)} disabled={!selectedVideo} title={`${SEEK_STEP_SECONDS} Sekunden vor (Shift+→)`}>+{SEEK_STEP_SECONDS}s</button>
+      <button aria-label="Vorheriger Keyframe" className="button button--subtle frame-nav-controls__btn" type="button" onClick={playback.jumpToPreviousKeyframe} disabled={!selectedVideo || playback.keyframeTimes.length === 0} title="Zum vorherigen Keyframe ([)">‹◆</button>
+      <button aria-label="Nächster Keyframe" className="button button--subtle frame-nav-controls__btn" type="button" onClick={playback.jumpToNextKeyframe} disabled={!selectedVideo || playback.keyframeTimes.length === 0} title="Zum nächsten Keyframe (])">◆›</button>
     </div>
   )
 
@@ -423,7 +502,7 @@ export function VideoWorkspace({
       >
         {playback.isReversing ? 'Vorwärts' : 'Rückwärts'}
       </button>
-      <button className="button button--subtle speed-controls__step" type="button" onClick={() => { setReversePlaybackError(null); playback.adjustPlaybackRate('slower') }} disabled={!selectedVideo || playback.playbackRate <= PLAYBACK_RATES[0]} title="Langsamer (<)" aria-label="Langsamer">◀</button>
+      <button className="button button--subtle speed-controls__step" type="button" onClick={() => { setReversePlaybackError(null); playback.adjustPlaybackRate('slower') }} disabled={!selectedVideo || playback.playbackRate <= PLAYBACK_RATES[0]} title="Langsamer (<)" aria-label="Langsamer">−</button>
       {PLAYBACK_RATES.map((rate) => (
         <button
           key={rate}
@@ -437,7 +516,7 @@ export function VideoWorkspace({
           {formatRate(rate)}
         </button>
       ))}
-      <button className="button button--subtle speed-controls__step" type="button" onClick={() => { setReversePlaybackError(null); playback.adjustPlaybackRate('faster') }} disabled={!selectedVideo || playback.playbackRate >= PLAYBACK_RATES[PLAYBACK_RATES.length - 1]} title="Schneller (>)" aria-label="Schneller">▶</button>
+      <button className="button button--subtle speed-controls__step" type="button" onClick={() => { setReversePlaybackError(null); playback.adjustPlaybackRate('faster') }} disabled={!selectedVideo || playback.playbackRate >= PLAYBACK_RATES[PLAYBACK_RATES.length - 1]} title="Schneller (>)" aria-label="Schneller">+</button>
       {reversePlaybackError && <span className="speed-controls__error" role="alert">{reversePlaybackError}</span>}
     </div>
   )
@@ -499,16 +578,19 @@ export function VideoWorkspace({
         <summary className="player-assist-pill shortcut-list__toggle">Tastenkürzel</summary>
         <div className="shortcut-list__grid">
           <kbd>Leertaste</kbd><span>Play / Pause</span>
-          <kbd>← →</kbd><span>Voriges / Nächstes Segment</span>
+          <kbd>←</kbd><span>Segmentanfang; zweimal: voriges Segment</span>
+          <kbd>→</kbd><span>Nächstes Segment</span>
           <kbd>Shift+← →</kbd><span>{SEEK_STEP_SECONDS} Sekunden zurück / vor</span>
           <kbd>, .</kbd><span>Ein Bild zurück / vor</span>
           <kbd>&lt; &gt;</kbd><span>Langsamer / Schneller</span>
-          <kbd>N</kbd><span>Nur Segmente abspielen</span>
+          <kbd>A</kbd><span>Zum Anstoß springen</span>
+          <kbd>N</kbd><span>Nur Segmente abspielen ein-/ausschalten</span>
           <kbd>F</kbd><span>Filter ein-/ausblenden</span>
           <kbd>R</kbd><span>Einzelwiederholung umschalten</span>
           <kbd>Z</kbd><span>Zoom-Steuerung ein-/ausblenden</span>
           <kbd>F11</kbd><span>Vollbild</span>
           <kbd>M</kbd><span>Stummschalten ein-/ausschalten</span>
+          <kbd>T</kbd><span>Zeiten und Segment ein-/ausblenden</span>
           <kbd>+ −</kbd><span>Zoom vergrößern / verkleinern</span>
           <kbd>0</kbd><span>Zoom zurücksetzen</span>
           <kbd>Shift+R</kbd><span>Vorwärts / Rückwärts umschalten</span>
@@ -537,6 +619,37 @@ export function VideoWorkspace({
     </label>
   )
 
+  const fullscreenRepeatButton = (
+    <button
+      className={`button button--subtle fullscreen-repeat-button${repeatSingleSegment ? ' button--active' : ''}`}
+      type="button"
+      disabled={segments.length === 0}
+      aria-label="Segment endlos wiederholen"
+      aria-pressed={repeatSingleSegment}
+      title={repeatSingleSegment ? 'Segmentwiederholung ausschalten (R)' : 'Segment endlos wiederholen (R)'}
+      onClick={() => onRepeatSingleSegmentChange(!repeatSingleSegment)}
+    >
+      <span>Wiederholen</span>
+      <kbd aria-hidden="true">R</kbd>
+    </button>
+  )
+
+  const fullscreenKickoffButton = (
+    <button
+      className="button button--subtle fullscreen-kickoff-button"
+      type="button"
+      disabled={!selectedVideo}
+      aria-label="Zum Anstoß springen"
+      title={selectedVideo?.kickoffVideoSeconds === undefined || selectedVideo.matchHalf === undefined
+        ? 'Zum Anstoß springen (A) – Anstoß nicht festgelegt'
+        : 'Zum Anstoß springen (A)'}
+      onClick={jumpToKickoff}
+    >
+      <span>Anstoß</span>
+      <kbd aria-hidden="true">A</kbd>
+    </button>
+  )
+
   const timeRow = (
     <div className="match-time-controls">
       <div className="time-row">
@@ -553,12 +666,91 @@ export function VideoWorkspace({
           <span className="match-time-jump__current">Spielzeit: {currentMatchTime !== null && currentMatchTime >= 0 ? formatClockTime(currentMatchTime) : 'vor Anstoß'}</span>
           <label htmlFor="match-time-input">Springe zu Spielzeit</label>
           <input id="match-time-input" value={matchTimeInput} onChange={(event) => setMatchTimeInput(event.target.value)} placeholder={selectedVideo?.matchHalf === 2 ? 'z. B. 45:12' : 'z. B. 09:00'} />
-          <button className="button button--subtle" type="submit">Springen</button>
+          <button className="button button--subtle" type="submit" title="Zur eingegebenen Spielzeit springen (Enter)">Springen</button>
           {matchTimeError && <span className="match-time-jump__error" role="alert">{matchTimeError}</span>}
         </form>
       )}
     </div>
   )
+
+  const fullscreenOrientation = isFullscreen && fullscreenStarted && fullscreenOrientationVisible && activeFullscreenFlyout !== 'bottom' ? (
+    <div
+      className={`fullscreen-orientation${playback.isPlaying ? ' fullscreen-orientation--playing' : ''}`}
+      data-testid="fullscreen-orientation"
+      aria-label="Zeit- und Segmentorientierung"
+    >
+      {hasMatchClock ? (
+        <div className="fullscreen-orientation__item fullscreen-orientation__item--primary">
+          <span>Spielzeit</span>
+          <strong>{currentMatchTime !== null && currentMatchTime >= 0 ? formatClockTime(currentMatchTime) : 'vor Anstoß'}</strong>
+        </div>
+      ) : null}
+      <div className="fullscreen-orientation__item">
+        <span>Video</span>
+        <strong>{formatClockTime(playback.currentTime)} <small>/ {formatClockTime(playback.duration)}</small></strong>
+        <em>noch {formatClockTime(Math.max(0, playback.duration - playback.currentTime))}</em>
+      </div>
+      {orientationSegment ? (
+        <div className="fullscreen-orientation__item">
+          <span>Segment {orientationSegmentIndex + 1}/{segments.length}</span>
+          <strong>noch {formatClockTime(orientationSegmentRemaining)}</strong>
+          <em>{formatClockTime(orientationSegment.startSeconds)}–{formatClockTime(orientationSegment.endSeconds)} · {segmentsAfterCurrent} danach</em>
+        </div>
+      ) : segments.length > 0 ? (
+        <div className="fullscreen-orientation__item">
+          <span>Segmente</span>
+          <strong>{segments.length} verfügbar</strong>
+          <em>{playback.isSegmentMode ? 'Segmentfolge aktiv' : 'Segmentmodus aus'}</em>
+        </div>
+      ) : null}
+      <button
+        className="fullscreen-orientation__close"
+        type="button"
+        onClick={() => setFullscreenOrientationVisible(false)}
+        title="Zeitinfo ausblenden (T)"
+        aria-label="Zeitinfo ausblenden"
+      >×</button>
+    </div>
+  ) : null
+
+  const fullscreenInfo = (
+    <div className="fullscreen-info">
+      <div className="fullscreen-info__heading">
+        <div>
+          <span className="fullscreen-info__eyebrow">Aktuelles Video</span>
+          <strong>{selectedVideo?.fileName ?? 'Kein Video geladen'}</strong>
+        </div>
+        <span className={`fullscreen-info__state${playback.isPlaying || playback.isInterstitialCounting ? ' fullscreen-info__state--active' : ''}`}>
+          {playback.isPlaying || playback.isInterstitialCounting ? 'Wiedergabe' : 'Pause'}
+        </span>
+      </div>
+      <div className="fullscreen-info__grid">
+        <div><span>Position</span><strong>{formatClockTime(playback.currentTime)} / {formatClockTime(playback.duration)}</strong></div>
+        {hasMatchClock ? <div><span>Spielzeit</span><strong>{currentMatchTime !== null && currentMatchTime >= 0 ? formatClockTime(currentMatchTime) : 'vor Anstoß'}</strong></div> : null}
+        <div><span>Wiedergabe</span><strong>{playback.isReversing ? 'Rückwärts' : 'Vorwärts'} · {formatRate(playback.playbackRate)}</strong></div>
+        <div><span>Ton</span><strong>{playback.segmentMuted ? 'im Segment aus' : playback.userMuted ? 'aus' : 'an'}</strong></div>
+        <div><span>Segmentmodus</span><strong>{playback.isSegmentMode ? 'aktiv' : 'aus'}</strong></div>
+        <div><span>Aktuelles Segment</span><strong>{orientationSegment ? `${orientationSegmentIndex + 1} von ${segments.length} · noch ${formatClockTime(orientationSegmentRemaining)}` : `– · ${segments.length} verfügbar`}</strong></div>
+      </div>
+      <label className="fullscreen-info__toggle" title="Zeiten und Segment ein-/ausblenden (T)">
+        <input
+          type="checkbox"
+          checked={fullscreenOrientationVisible}
+          onChange={(event) => setFullscreenOrientationVisible(event.target.checked)}
+        />
+        <span>Zeiten und Segment anzeigen</span>
+        <kbd>T</kbd>
+      </label>
+      {assistRow}
+      {playbackHint}
+    </div>
+  )
+
+  const fullscreenPlaybackBanner = isFullscreen && errorBanner ? (
+    <div className="fullscreen-playback-banner" data-testid="fullscreen-playback-banner" role="alert">
+      {errorBanner}
+    </div>
+  ) : null
 
   const timeline = (
     <SegmentTimeline
@@ -576,7 +768,10 @@ export function VideoWorkspace({
     <SegmentList
       segments={segments}
       activeSegmentIndex={playback.activeSegmentIndex}
-      onSelectSegment={(index) => playback.jumpToSegment(index, false, true)}
+      onSelectSegment={(index) => {
+        playback.jumpToSegment(index, false, true)
+        if (isFullscreen) closeUnpinnedFullscreenFlyout('left')
+      }}
     />
   )
 
@@ -639,17 +834,17 @@ export function VideoWorkspace({
 
   const fullscreenFlyouts = isFullscreen ? (
     <div className="fullscreen-flyouts" data-testid="fullscreen-flyout-shell">
-      <button aria-controls="fullscreen-flyout-top" aria-expanded={activeFullscreenFlyout === 'top'} aria-label={`Info ${activeFullscreenFlyout === 'top' ? 'ausblenden' : 'einblenden'}`} className="fullscreen-edge-trigger fullscreen-edge-trigger--top" type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('top')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('top')} onFocus={() => handleFullscreenFlyoutMouseEnter('top')} onBlur={() => handleFullscreenFlyoutMouseLeave('top')} onClick={() => toggleFullscreenFlyout('top')}>Info</button>
+      <button aria-controls="fullscreen-flyout-top" aria-expanded={activeFullscreenFlyout === 'top'} aria-pressed={pinnedFullscreenFlyout === 'top'} aria-label={pinnedFullscreenFlyout === 'top' ? 'Info angeheftet; klicken zum Lösen' : 'Info einblenden'} className={`fullscreen-edge-trigger fullscreen-edge-trigger--top${pinnedFullscreenFlyout === 'top' ? ' fullscreen-edge-trigger--pinned' : ''}`} type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('top')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('top')} onFocus={() => handleFullscreenFlyoutMouseEnter('top')} onBlur={() => handleFullscreenFlyoutMouseLeave('top')} onClick={() => toggleFullscreenFlyout('top')}><span>Info</span>{pinnedFullscreenFlyout === 'top' ? <FlyoutPinIndicator /> : null}</button>
       <div aria-hidden={activeFullscreenFlyout !== 'top'} className={`fullscreen-flyout-panel fullscreen-flyout-panel--top ${activeFullscreenFlyout === 'top' ? 'fullscreen-flyout-panel--open' : ''}`} id="fullscreen-flyout-top" inert={activeFullscreenFlyout !== 'top'} onMouseEnter={() => handleFullscreenFlyoutMouseEnter('top')} onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) handleFullscreenFlyoutMouseLeave('top') }} onFocus={() => handleFullscreenFlyoutMouseEnter('top')} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) handleFullscreenFlyoutMouseLeave('top') }}>
-        <div className="fullscreen-card">{playerHeader}{assistRow}{playbackHint}</div>
+        <div className="fullscreen-card">{fullscreenInfo}</div>
       </div>
 
-      <button aria-controls="fullscreen-flyout-left" aria-expanded={activeFullscreenFlyout === 'left'} aria-label={`Segmente ${activeFullscreenFlyout === 'left' ? 'ausblenden' : 'einblenden'}`} className="fullscreen-edge-trigger fullscreen-edge-trigger--left" type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('left')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('left')} onFocus={() => handleFullscreenFlyoutMouseEnter('left')} onBlur={() => handleFullscreenFlyoutMouseLeave('left')} onClick={() => toggleFullscreenFlyout('left')}>Segmente</button>
+      <button aria-controls="fullscreen-flyout-left" aria-expanded={activeFullscreenFlyout === 'left'} aria-pressed={pinnedFullscreenFlyout === 'left'} aria-label={pinnedFullscreenFlyout === 'left' ? 'Segmente angeheftet; klicken zum Lösen' : 'Segmente einblenden'} className={`fullscreen-edge-trigger fullscreen-edge-trigger--left${pinnedFullscreenFlyout === 'left' ? ' fullscreen-edge-trigger--pinned' : ''}`} type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('left')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('left')} onFocus={() => handleFullscreenFlyoutMouseEnter('left')} onBlur={() => handleFullscreenFlyoutMouseLeave('left')} onClick={() => toggleFullscreenFlyout('left')}><span>Segmente</span>{pinnedFullscreenFlyout === 'left' ? <FlyoutPinIndicator /> : null}</button>
       <div aria-hidden={activeFullscreenFlyout !== 'left'} className={`fullscreen-flyout-panel fullscreen-flyout-panel--left ${activeFullscreenFlyout === 'left' ? 'fullscreen-flyout-panel--open' : ''}`} id="fullscreen-flyout-left" inert={activeFullscreenFlyout !== 'left'} onMouseEnter={() => handleFullscreenFlyoutMouseEnter('left')} onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) handleFullscreenFlyoutMouseLeave('left') }} onFocus={() => handleFullscreenFlyoutMouseEnter('left')} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) handleFullscreenFlyoutMouseLeave('left') }}>
         {segmentList}
       </div>
 
-      <button aria-controls="fullscreen-flyout-right" aria-expanded={activeFullscreenFlyout === 'right'} aria-label={`Werkzeuge ${activeFullscreenFlyout === 'right' ? 'ausblenden' : 'einblenden'}`} className="fullscreen-edge-trigger fullscreen-edge-trigger--right" type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('right')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('right')} onFocus={() => handleFullscreenFlyoutMouseEnter('right')} onBlur={() => handleFullscreenFlyoutMouseLeave('right')} onClick={() => toggleFullscreenFlyout('right')}>Werkzeuge</button>
+      <button aria-controls="fullscreen-flyout-right" aria-expanded={activeFullscreenFlyout === 'right'} aria-pressed={pinnedFullscreenFlyout === 'right'} aria-label={pinnedFullscreenFlyout === 'right' ? 'Werkzeuge angeheftet; klicken zum Lösen' : 'Werkzeuge einblenden'} className={`fullscreen-edge-trigger fullscreen-edge-trigger--right${pinnedFullscreenFlyout === 'right' ? ' fullscreen-edge-trigger--pinned' : ''}`} type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('right')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('right')} onFocus={() => handleFullscreenFlyoutMouseEnter('right')} onBlur={() => handleFullscreenFlyoutMouseLeave('right')} onClick={() => toggleFullscreenFlyout('right')}><span>Werkzeuge</span>{pinnedFullscreenFlyout === 'right' ? <FlyoutPinIndicator /> : null}</button>
       <div aria-hidden={activeFullscreenFlyout !== 'right'} className={`fullscreen-flyout-panel fullscreen-flyout-panel--right ${activeFullscreenFlyout === 'right' ? 'fullscreen-flyout-panel--open' : ''}`} data-testid="fullscreen-flyout-right-panel" id="fullscreen-flyout-right" inert={activeFullscreenFlyout !== 'right'} onMouseEnter={() => handleFullscreenFlyoutMouseEnter('right')} onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) handleFullscreenFlyoutMouseLeave('right') }} onFocus={() => handleFullscreenFlyoutMouseEnter('right')} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) handleFullscreenFlyoutMouseLeave('right') }}>
         <div className="fullscreen-card fullscreen-card--stacked">
           <div className="fullscreen-exit-row">
@@ -672,7 +867,6 @@ export function VideoWorkspace({
           </div>
           {zoomControlsPanel}
           {repeatToggle}
-          {errorBanner}
           <div className="fullscreen-filter-slot">
             {isValidElement<{ visible: boolean }>(children) && typeof children.type !== 'string'
               ? cloneElement(children, { visible: true })
@@ -681,14 +875,22 @@ export function VideoWorkspace({
         </div>
       </div>
 
-      <button aria-controls="fullscreen-flyout-bottom" aria-expanded={activeFullscreenFlyout === 'bottom'} aria-label={`Wiedergabe und Timeline ${activeFullscreenFlyout === 'bottom' ? 'ausblenden' : 'einblenden'}`} className="fullscreen-edge-trigger fullscreen-edge-trigger--bottom" type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('bottom')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('bottom')} onFocus={() => handleFullscreenFlyoutMouseEnter('bottom')} onBlur={() => handleFullscreenFlyoutMouseLeave('bottom')} onClick={() => toggleFullscreenFlyout('bottom')}>Steuerung</button>
+      <button aria-controls="fullscreen-flyout-bottom" aria-expanded={activeFullscreenFlyout === 'bottom'} aria-pressed={pinnedFullscreenFlyout === 'bottom'} aria-label={pinnedFullscreenFlyout === 'bottom' ? 'Steuerung angeheftet; klicken zum Lösen' : 'Wiedergabe und Timeline einblenden'} className={`fullscreen-edge-trigger fullscreen-edge-trigger--bottom${pinnedFullscreenFlyout === 'bottom' ? ' fullscreen-edge-trigger--pinned' : ''}`} type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('bottom')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('bottom')} onFocus={() => handleFullscreenFlyoutMouseEnter('bottom')} onBlur={() => handleFullscreenFlyoutMouseLeave('bottom')} onClick={() => toggleFullscreenFlyout('bottom')}><span>Steuerung</span>{pinnedFullscreenFlyout === 'bottom' ? <FlyoutPinIndicator /> : null}</button>
       <div aria-hidden={activeFullscreenFlyout !== 'bottom'} className={`fullscreen-flyout-panel fullscreen-flyout-panel--bottom ${activeFullscreenFlyout === 'bottom' ? 'fullscreen-flyout-panel--open' : ''}`} id="fullscreen-flyout-bottom" inert={activeFullscreenFlyout !== 'bottom'} onMouseEnter={() => handleFullscreenFlyoutMouseEnter('bottom')} onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) handleFullscreenFlyoutMouseLeave('bottom') }} onFocus={() => handleFullscreenFlyoutMouseEnter('bottom')} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) handleFullscreenFlyoutMouseLeave('bottom') }}>
         <div className="fullscreen-card fullscreen-card--stacked">
-          <div className="player-controls player-controls--fullscreen">{transportControls}</div>
-          {frameNavControls}
-          {speedControls}
-          {timeRow}
           {timeline}
+          {timeRow}
+          <div className="player-controls player-controls--fullscreen">
+            <div className="fullscreen-transport-row">
+              {transportControls}
+              {fullscreenKickoffButton}
+              {fullscreenRepeatButton}
+            </div>
+          </div>
+          <div className="fullscreen-precision-row">
+            {frameNavControls}
+            {speedControls}
+          </div>
         </div>
       </div>
     </div>
@@ -828,6 +1030,8 @@ export function VideoWorkspace({
                     </span>
                   </div>
                 ) : null}
+                {fullscreenOrientation}
+                {fullscreenPlaybackBanner}
               </div>
 
               {zoomControls}
@@ -844,18 +1048,24 @@ export function VideoWorkspace({
 
         {!isFullscreen ? (
           <>
-            {timeline}
-            {timeRow}
-            <div className="player-controls" data-testid="player-inline-controls">
-              {transportControls}
-              {utilityControls}
+            <div className="player-control-deck">
+              {timeline}
+              {timeRow}
+              <div className="player-controls" data-testid="player-inline-controls">
+                {transportControls}
+                {utilityControls}
+              </div>
+              <div className="player-controls__precision">
+                {frameNavControls}
+                {speedControls}
+              </div>
+              <div className="player-controls__secondary">
+                {assistRow}
+                {repeatToggle}
+              </div>
+              {playbackHint}
+              {errorBanner}
             </div>
-            {frameNavControls}
-            {speedControls}
-            {assistRow}
-            {playbackHint}
-            {repeatToggle}
-            {errorBanner}
             {overlayDialogs}
           </>
         ) : (

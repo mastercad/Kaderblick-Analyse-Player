@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import type { VideoFileDescriptor } from '../../../../common/types'
 import { VideoWorkspace } from './VideoWorkspace'
 
@@ -51,6 +51,24 @@ const fireMetadataWithNoVideoTrack = (videoEl: HTMLVideoElement): void => {
 }
 
 describe('VideoWorkspace – video error handling', () => {
+  it('shows genuine playback errors over the video instead of inside the filter tools', () => {
+    render(
+      <VideoWorkspace {...baseProps} selectedVideo={directVideo}>
+        <div>Filterinhalt</div>
+      </VideoWorkspace>
+    )
+
+    const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
+    act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+
+    fireVideoError(document.querySelector('video')!, MEDIA_ERR_DECODE)
+
+    expect(screen.getByTestId('fullscreen-playback-banner')).toHaveTextContent(/konnte nicht decodiert/)
+    expect(within(screen.getByTestId('fullscreen-flyout-right-panel')).queryByText(/konnte nicht decodiert/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Werkzeuge einblenden' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
   describe('MEDIA_ERR_SRC_NOT_SUPPORTED (codec not supported)', () => {
     it('calls onVideoError with recoverable=true', () => {
       const onVideoError = vi.fn()

@@ -549,6 +549,65 @@ describe('VideoWorkspace – frame navigation while playing', () => {
     expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
     expect(onPlayStateChange).not.toHaveBeenCalledWith(false)
   })
+
+  it('does not report the expected pause/play interruption as a video error', async () => {
+    const onVideoError = vi.fn()
+    render(
+      <VideoWorkspace {...baseProps} selectedVideo={directVideo} onVideoError={onVideoError}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video') as HTMLVideoElement
+    fireLoadedMetadata(video)
+    video.currentTime = 10
+    video.play = vi.fn().mockResolvedValueOnce(undefined)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Play' })) })
+
+    vi.mocked(video.play).mockRejectedValueOnce(new DOMException(
+      'The play() request was interrupted by a call to pause(). https://goo.gl/LdLk22',
+      'AbortError'
+    ))
+    await act(async () => {
+      fireEvent.keyDown(window, { key: ',', code: 'Comma' })
+      await Promise.resolve()
+    })
+
+    expect(onVideoError).not.toHaveBeenCalled()
+    expect(screen.queryByText(/play\(\) request was interrupted/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
+  })
+})
+
+describe('VideoWorkspace – kickoff navigation', () => {
+  it('jumps to kickoff without changing pause, speed, direction, or segment mode', async () => {
+    render(
+      <VideoWorkspace
+        {...baseProps}
+        selectedVideo={{ ...directVideo, matchHalf: 1, kickoffVideoSeconds: 30 }}
+        segments={[{
+          id: 's1', sourceVideoName: directVideo.fileName, sourceVideoPath: directVideo.path,
+          startSeconds: 60, endSeconds: 90, lengthSeconds: 30, title: 'Szene', subTitle: '', audioTrack: '1'
+        }]}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video') as HTMLVideoElement
+    fireLoadedMetadata(video)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Nur Segmente abspielen' })) })
+    fireEvent.click(screen.getByTitle('Geschwindigkeit: ½×'))
+    fireEvent.click(screen.getByRole('button', { name: 'Rückwärts' }))
+
+    fireEvent.keyDown(window, { code: 'KeyA', key: 'a' })
+
+    expect(video.currentTime).toBe(30)
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Segmentmodus beenden' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Vorwärts' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTitle('Geschwindigkeit: ½×')).toHaveAttribute('aria-pressed', 'true')
+  })
 })
 
 // ---------------------------------------------------------------------------

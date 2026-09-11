@@ -1,4 +1,5 @@
 export type FullscreenFlyout = 'top' | 'left' | 'right' | 'bottom'
+export type PreviousSegmentNavigationResult = 'segment-start' | 'previous-segment' | 'sequence-start'
 export type Point = { x: number; y: number }
 export type Size = { width: number; height: number }
 export type VideoRect = { left: number; top: number; width: number; height: number }

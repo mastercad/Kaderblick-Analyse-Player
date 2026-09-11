@@ -113,6 +113,7 @@ describe('useFullscreen – stable flyout state', () => {
     const { hook } = setup()
     act(() => { hook.result.current.toggleFullscreenFlyout('right') })
     expect(hook.result.current.activeFullscreenFlyout).toBe('right')
+    expect(hook.result.current.pinnedFullscreenFlyout).toBe('right')
   })
 
   it('unpins the flyout on the second toggle and closes after hover ends', () => {
@@ -121,6 +122,7 @@ describe('useFullscreen – stable flyout state', () => {
     act(() => { hook.result.current.toggleFullscreenFlyout('right') })
     act(() => { hook.result.current.toggleFullscreenFlyout('right') })
     expect(hook.result.current.activeFullscreenFlyout).toBe('right')
+    expect(hook.result.current.pinnedFullscreenFlyout).toBeNull()
     act(() => { hook.result.current.handleFullscreenFlyoutMouseLeave('right') })
     act(() => { vi.advanceTimersByTime(240) })
     expect(hook.result.current.activeFullscreenFlyout).toBeNull()
@@ -145,6 +147,21 @@ describe('useFullscreen – stable flyout state', () => {
     act(() => { hook.result.current.setPinnedFullscreenFlyout('right') })
     act(() => { hook.result.current.setPinnedFullscreenFlyout(null) })
     expect(hook.result.current.activeFullscreenFlyout).toBeNull()
+  })
+
+  it('closes a hover-opened flyout after an action inside it', () => {
+    const { hook } = setup()
+    act(() => { hook.result.current.handleFullscreenFlyoutMouseEnter('left') })
+    act(() => { hook.result.current.closeUnpinnedFullscreenFlyout('left') })
+    expect(hook.result.current.activeFullscreenFlyout).toBeNull()
+  })
+
+  it('keeps an explicitly pinned flyout open after an action inside it', () => {
+    const { hook } = setup()
+    act(() => { hook.result.current.toggleFullscreenFlyout('left') })
+    act(() => { hook.result.current.closeUnpinnedFullscreenFlyout('left') })
+    expect(hook.result.current.activeFullscreenFlyout).toBe('left')
+    expect(hook.result.current.pinnedFullscreenFlyout).toBe('left')
   })
 })
 

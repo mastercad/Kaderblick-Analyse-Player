@@ -7,7 +7,8 @@ import {
   getFittedVideoRect,
   clampZoomOffset,
   getMediaErrorMessage,
-  getMissingVideoTrackMessage
+  getMissingVideoTrackMessage,
+  isPlayInterruptedByPause
 } from './playerUtils'
 import { MIN_ZOOM_LEVEL } from './playerTypes'
 import type { VideoFileDescriptor } from '../../../../common/types'
@@ -38,6 +39,19 @@ describe('formatRate', () => {
   it('falls back to "{rate}×" for unknown rates', () => {
     expect(formatRate(3)).toBe('3×')
     expect(formatRate(0.1)).toBe('0.1×')
+  })
+})
+
+describe('isPlayInterruptedByPause', () => {
+  it('recognizes the Chromium pause/play interruption', () => {
+    expect(isPlayInterruptedByPause(new DOMException(
+      'The play() request was interrupted by a call to pause(). https://goo.gl/LdLk22',
+      'AbortError'
+    ))).toBe(true)
+  })
+
+  it('does not hide unrelated playback failures', () => {
+    expect(isPlayInterruptedByPause(new Error('Decoder failed'))).toBe(false)
   })
 })
 

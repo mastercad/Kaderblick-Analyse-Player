@@ -13,6 +13,9 @@ export const formatRate = (rate: number): string => {
   return `${rate}×`
 }
 
+export const isPlayInterruptedByPause = (error: unknown): boolean =>
+  error instanceof Error && /play\(\) request was interrupted by a call to pause\(\)/i.test(error.message)
+
 export const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), max)
 

@@ -10,9 +10,9 @@ import {
 import { findNextKeyframeTime, findPreviousKeyframeTime } from '../../../../common/keyframeUtils'
 import { getSegmentPlaybackTransition } from '../../../../common/segmentPlayback'
 import type { Segment, VideoFileDescriptor } from '../../../../common/types'
-import { getMediaErrorMessage, getMissingVideoTrackMessage } from './playerUtils'
+import { getMediaErrorMessage, getMissingVideoTrackMessage, isPlayInterruptedByPause } from './playerUtils'
 import { FRAME_STEP_SECONDS, PLAYBACK_RATES, PREVIOUS_SEGMENT_REPEAT_WINDOW_MS, SEEK_STEP_SECONDS } from './playerTypes'
-import type { Size } from './playerTypes'
+import type { PreviousSegmentNavigationResult, Size } from './playerTypes'
 
 interface UseVideoPlaybackOptions {
   videoRef: RefObject<HTMLVideoElement | null>
@@ -481,15 +481,18 @@ export function useVideoPlayback({
     }
   }
 
-  const jumpToPreviousSegment = (): void => {
+  const jumpToPreviousSegment = (): PreviousSegmentNavigationResult => {
     const activeIndex = findActiveSegmentIndex(segments, getEffectiveCurrentTime())
     if (activeIndex >= 0) {
       const previousRestart = previousSegmentRestartRef.current
       if (previousRestart?.segmentIndex === activeIndex && Date.now() <= previousRestart.expiresAt) {
         previousSegmentRestartRef.current = null
-        if (activeIndex > 0) jumpToSegment(activeIndex - 1, false, true)
-        else onFirstSegmentReached?.()
-        return
+        if (activeIndex > 0) {
+          jumpToSegment(activeIndex - 1, false, true)
+          return 'previous-segment'
+        }
+        onFirstSegmentReached?.()
+        return 'sequence-start'
       }
 
       jumpToSegment(activeIndex)
@@ -497,15 +500,21 @@ export function useVideoPlayback({
         segmentIndex: activeIndex,
         expiresAt: Date.now() + PREVIOUS_SEGMENT_REPEAT_WINDOW_MS
       }
-      return
+      return 'segment-start'
     }
 
     previousSegmentRestartRef.current = null
     const previousIndex = getPreviousSegmentIndex(segments, getEffectiveCurrentTime())
     if (previousIndex >= 0) {
       jumpToSegment(previousIndex, false, true)
+      previousSegmentRestartRef.current = {
+        segmentIndex: previousIndex,
+        expiresAt: Date.now() + PREVIOUS_SEGMENT_REPEAT_WINDOW_MS
+      }
+      return 'previous-segment'
     } else {
       onFirstSegmentReached?.()
+      return 'sequence-start'
     }
   }
 
@@ -522,6 +531,7 @@ export function useVideoPlayback({
     seekTo(Math.max(0, Math.min(getEffectiveMaxDuration(), getEffectiveCurrentTime() + delta)))
     if (resumeForwardPlayback) {
       void videoRef.current.play().catch((error: unknown) => {
+        if (isPlayInterruptedByPause(error)) return
         const nextMessage = error instanceof Error
           ? error.message
           : getMediaErrorMessage(videoRef.current!, selectedVideo)

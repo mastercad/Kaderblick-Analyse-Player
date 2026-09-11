@@ -13,8 +13,9 @@ export function SegmentList({ segments, activeSegmentIndex, onSelectSegment }: S
       <div className="panel__header">
         <div>
           <p className="panel__eyebrow">Segmente</p>
-          <h2>Alle Treffer für das geladene Video</h2>
+          <h2>Szenen im aktuellen Video</h2>
         </div>
+        <span className="segment-list-panel__count">{segments.length}</span>
       </div>
 
       <div className="segment-list">
@@ -28,12 +29,12 @@ export function SegmentList({ segments, activeSegmentIndex, onSelectSegment }: S
               type="button"
               onClick={() => onSelectSegment(index)}
             >
-              <span className="segment-card__index">#{index + 1}</span>
-              <strong>{segment.title || 'Ohne Titel'}</strong>
-              <span>
+              <span className="segment-card__index">{String(index + 1).padStart(2, '0')}</span>
+              <strong className="segment-card__title">{segment.title || 'Ohne Titel'}</strong>
+              <span className="segment-card__time">
                 {formatClockTime(segment.startSeconds)} bis {formatClockTime(segment.endSeconds)}
               </span>
-              <span>{segment.subTitle || 'Keine Unterzeile'}</span>
+              {segment.subTitle ? <span className="segment-card__subtitle">{segment.subTitle}</span> : null}
             </button>
           ))
         )}

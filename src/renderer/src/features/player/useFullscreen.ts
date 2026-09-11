@@ -73,12 +73,20 @@ export function useFullscreen({ playerPanelRef }: UseFullscreenOptions) {
     }, 240)
   }
 
+  const closeUnpinnedFullscreenFlyout = (flyout: FullscreenFlyout): void => {
+    if (pinnedFullscreenFlyout === flyout) return
+    cancelHoverClose()
+    setHoveredFullscreenFlyout((current) => (current === flyout ? null : current))
+  }
+
   return {
     isFullscreen,
     activeFullscreenFlyout,
+    pinnedFullscreenFlyout,
     setPinnedFullscreenFlyout,
     toggleFullscreen,
     toggleFullscreenFlyout,
+    closeUnpinnedFullscreenFlyout,
     handleFullscreenFlyoutMouseEnter,
     handleFullscreenFlyoutMouseLeave
   }

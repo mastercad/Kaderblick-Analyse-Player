@@ -1468,6 +1468,31 @@ describe('VideoWorkspace – Bug 1: onAllSegmentsDone wird gerufen wenn kein nä
 })
 
 describe('VideoWorkspace – zweistufige Rückwärtsnavigation', () => {
+  it('nutzt Segmente außerhalb des Segmentmodus als Sprungmarken und geht beim zweiten schnellen Druck genau eins weiter zurück', () => {
+    const spacedSegments = [
+      makeSegment('s1', 10, 20, 'Erstes'),
+      makeSegment('s2', 40, 50, 'Zweites'),
+      makeSegment('s3', 70, 80, 'Drittes')
+    ]
+    render(
+      <VideoWorkspace {...baseProps} segments={spacedSegments} interstitialDuration={0}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const videoEl = document.querySelector('video')!
+    Object.defineProperty(videoEl, 'currentTime', { value: 60, configurable: true, writable: true })
+    act(() => { fireEvent(videoEl, new Event('timeupdate')) })
+    expect(screen.getByRole('button', { name: 'Nur Segmente abspielen' })).toHaveAttribute('aria-pressed', 'false')
+
+    act(() => { fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft', repeat: false }) })
+    expect(document.querySelector('.time-row__current')?.textContent).toBe('00:40')
+
+    act(() => { fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft', repeat: false }) })
+    expect(document.querySelector('.time-row__current')?.textContent).toBe('00:10')
+    expect(screen.getByRole('button', { name: 'Nur Segmente abspielen' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
   it('startet beim ersten Klick das erste Segment neu und ruft erst beim zweiten Klick onFirstSegmentReached auf', () => {
     const onFirstSegmentReached = vi.fn()
     render(

@@ -4,6 +4,7 @@ import { findActiveSegmentIndex, getNextSegmentIndex, getPreviousSegmentIndex, r
 import { getSegmentPlaybackTransition } from '../../../../common/segmentPlayback'
 import type { Segment, VideoFileDescriptor } from '../../../../common/types'
 import { PLAYBACK_RATES, PREVIOUS_SEGMENT_REPEAT_WINDOW_MS } from './playerTypes'
+import type { PreviousSegmentNavigationResult } from './playerTypes'
 
 // ─── Module-level API loading ─────────────────────────────────────────────────
 
@@ -594,15 +595,18 @@ export function useOnlineVideoPlayback({
     }
   }
 
-  const jumpToPreviousSegment = (): void => {
+  const jumpToPreviousSegment = (): PreviousSegmentNavigationResult => {
     const activeIndex = findActiveSegmentIndex(segmentsRef.current, currentTimeRef.current)
     if (activeIndex >= 0) {
       const previousRestart = previousSegmentRestartRef.current
       if (previousRestart?.segmentIndex === activeIndex && Date.now() <= previousRestart.expiresAt) {
         previousSegmentRestartRef.current = null
-        if (activeIndex > 0) jumpToSegment(activeIndex - 1, false, true)
-        else onFirstSegmentReached?.()
-        return
+        if (activeIndex > 0) {
+          jumpToSegment(activeIndex - 1, false, true)
+          return 'previous-segment'
+        }
+        onFirstSegmentReached?.()
+        return 'sequence-start'
       }
 
       jumpToSegment(activeIndex)
@@ -610,15 +614,21 @@ export function useOnlineVideoPlayback({
         segmentIndex: activeIndex,
         expiresAt: Date.now() + PREVIOUS_SEGMENT_REPEAT_WINDOW_MS
       }
-      return
+      return 'segment-start'
     }
 
     previousSegmentRestartRef.current = null
     const previousIndex = getPreviousSegmentIndex(segments, currentTimeRef.current)
     if (previousIndex >= 0) {
       jumpToSegment(previousIndex, false, true)
+      previousSegmentRestartRef.current = {
+        segmentIndex: previousIndex,
+        expiresAt: Date.now() + PREVIOUS_SEGMENT_REPEAT_WINDOW_MS
+      }
+      return 'previous-segment'
     } else {
       onFirstSegmentReached?.()
+      return 'sequence-start'
     }
   }
 
