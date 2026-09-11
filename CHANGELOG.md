@@ -1,3 +1,10 @@
+## [2.4.3](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.4.2...v2.4.3) (2026-09-11)
+
+
+### Bug Fixes
+
+* usability problems ([2e718e3](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/2e718e3f03e9dc1ccadc848dd3e6914d44236489))
+
 ## [2.4.2](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.4.1...v2.4.2) (2026-09-09)
 
 
