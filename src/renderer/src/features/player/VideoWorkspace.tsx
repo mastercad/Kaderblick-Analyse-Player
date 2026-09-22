@@ -495,9 +495,13 @@ export function VideoWorkspace({
       <button
         className={`button button--subtle${playback.isReversing ? ' button--active' : ''}`}
         type="button"
-        disabled={!selectedVideo}
+        disabled={!selectedVideo || selectedVideo.playbackMode === 'online'}
         aria-pressed={playback.isReversing}
-        title={playback.isReversing ? 'Zur Vorwärtswiedergabe wechseln (Shift+R)' : 'Video rückwärts abspielen (Shift+R, ohne Ton)'}
+        title={selectedVideo?.playbackMode === 'online'
+          ? 'Rückwärtswiedergabe ist bei Online-Videos nicht verfügbar'
+          : playback.isReversing
+            ? 'Zur Vorwärtswiedergabe wechseln (Shift+R)'
+            : 'Video rückwärts abspielen (Shift+R, ohne Ton)'}
         onClick={() => setReversePlaybackError(playback.toggleReversePlayback())}
       >
         {playback.isReversing ? 'Vorwärts' : 'Rückwärts'}

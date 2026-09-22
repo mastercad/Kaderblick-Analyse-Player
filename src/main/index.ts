@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, ipcMain, protocol } from 'electron'
+import { app, BrowserWindow, ipcMain, protocol, session } from 'electron'
 import { defaultAppInfo } from '../common/appInfo'
 import { KVIDEO_SCHEME } from '../common/streaming'
 import type { AppSettingsExport, FilterPreset } from '../common/types'
@@ -9,6 +9,7 @@ import { exportAppSettingsToJson, importAppSettingsFromJson, exportPresetsToJson
 import { readStoredPresets, writeStoredPresets } from './presetStorage'
 import { initStreamingProtocol, registerStreamingProtocol } from './streamingProtocol'
 import { ffmpegExecutable, getKeyframeTimes, prepareStreamingPlayback } from './videoPlayback'
+import { addYouTubeClientReferer, YOUTUBE_EMBED_URLS } from './youtubeRequestIdentity'
 
 
 protocol.registerSchemesAsPrivileged([{
@@ -23,6 +24,15 @@ protocol.registerSchemesAsPrivileged([{
 }])
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
+
+function configureYouTubeRequestIdentity(): void {
+  session.fromPartition('persist:main').webRequest.onBeforeSendHeaders(
+    { urls: YOUTUBE_EMBED_URLS },
+    (details, callback) => {
+      callback({ requestHeaders: addYouTubeClientReferer(details.requestHeaders) })
+    }
+  )
+}
 
 function resolveAppIcon(): string {
   const base = path.join(currentDirectory, '../../assets')
@@ -78,6 +88,7 @@ const createWindow = (): void => {
 app.whenReady().then(() => {
   app.setAppUserModelId('de.fussballverein.video-player')
 
+  configureYouTubeRequestIdentity()
   initStreamingProtocol(ffmpegExecutable)
   registerStreamingProtocol()
 

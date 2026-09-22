@@ -16,6 +16,7 @@ const mockYtPlayer = {
   seekTo: vi.fn(),
   getCurrentTime: vi.fn(() => 0),
   getDuration: vi.fn(() => 120),
+  setPlaybackRate: vi.fn(),
   setVolume: vi.fn(),
   mute: vi.fn(),
   unMute: vi.fn(),
@@ -115,8 +116,8 @@ async function setup(overrides: SetupOptions = {}) {
   const onSegmentModeChange = vi.fn()
   const onCurrentTimeChange = vi.fn()
 
-  const hookResult = renderHook(() =>
-    useOnlineVideoPlayback({
+  const hookResult = renderHook(
+    (props: SetupOptions) => useOnlineVideoPlayback({
       containerRef,
       selectedVideo: onlineVideo,
       segments: [],
@@ -131,8 +132,9 @@ async function setup(overrides: SetupOptions = {}) {
       onVideoEnded,
       onSegmentModeChange,
       onCurrentTimeChange,
-      ...overrides
-    })
+      ...props
+    }),
+    { initialProps: overrides }
   )
 
   // Flush effects and microtasks so initYouTube() runs and MockYTPlayer is invoked
@@ -153,6 +155,7 @@ async function setup(overrides: SetupOptions = {}) {
 
   return {
     result: hookResult.result,
+    rerender: hookResult.rerender,
     onVideoLoaded,
     onVideoError,
     onAllSegmentsDone,
@@ -338,6 +341,33 @@ describe('useOnlineVideoPlayback – jumpBySeconds', () => {
   })
 })
 
+describe('useOnlineVideoPlayback – frame and speed controls', () => {
+  it('steps one frame backward and forward', async () => {
+    const { result, fireReady } = await setup()
+    fireReady()
+    act(() => { result.current.seekTo(10) })
+
+    act(() => { result.current.stepFrame('backward') })
+    expect(mockYtPlayer.seekTo).toHaveBeenLastCalledWith(10 - (1 / 25), true)
+
+    act(() => { result.current.stepFrame('forward') })
+    expect(mockYtPlayer.seekTo).toHaveBeenLastCalledWith(10, true)
+  })
+
+  it('changes the YouTube playback rate directly and incrementally', async () => {
+    const { result, fireReady } = await setup()
+    fireReady()
+
+    act(() => { result.current.changePlaybackRate(1.5) })
+    expect(mockYtPlayer.setPlaybackRate).toHaveBeenLastCalledWith(1.5)
+    expect(result.current.playbackRate).toBe(1.5)
+
+    act(() => { result.current.adjustPlaybackRate('faster') })
+    expect(mockYtPlayer.setPlaybackRate).toHaveBeenLastCalledWith(2)
+    expect(result.current.playbackRate).toBe(2)
+  })
+})
+
 // ---------------------------------------------------------------------------
 // Error handling
 // ---------------------------------------------------------------------------
@@ -361,6 +391,16 @@ describe('useOnlineVideoPlayback – error handling', () => {
     fireError(999)
 
     expect(result.current.videoError).toMatch(/999/)
+  })
+
+  it('explains YouTube error 153 as a missing player identity', async () => {
+    const { result, onVideoError, fireReady, fireError } = await setup()
+    fireReady()
+
+    fireError(153)
+
+    expect(result.current.videoError).toMatch(/nicht identifizieren/i)
+    expect(onVideoError).toHaveBeenCalledWith(expect.stringMatching(/nicht identifizieren/i), false)
   })
 })
 
@@ -471,6 +511,28 @@ describe('useOnlineVideoPlayback – segment mode', () => {
     expect(onSegmentModeChange).toHaveBeenCalledWith(false)
   })
 
+  it('repeats a segment when repeat mode is enabled after the online player was created', async () => {
+    vi.useFakeTimers()
+    try {
+      const singleSegment = [makeSegment(10, 30)]
+      const { result, rerender, fireReady } = await setup({ segments: singleSegment })
+      fireReady()
+      await act(async () => { await result.current.startSegmentPlayback(true) })
+
+      rerender({ segments: singleSegment, repeatSingleSegment: true })
+      mockYtPlayer.seekTo.mockClear()
+      mockYtPlayer.getCurrentTime.mockReturnValue(30)
+
+      act(() => { vi.advanceTimersByTime(200) })
+
+      expect(mockYtPlayer.seekTo).toHaveBeenCalledWith(10, true)
+      expect(mockYtPlayer.playVideo).toHaveBeenCalled()
+      expect(result.current.isSegmentMode).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('calls onAllSegmentsDone when jumpToNextSegment goes past the last segment', async () => {
     const { result, onAllSegmentsDone, fireReady } = await setup({ segments })
     fireReady()
@@ -507,20 +569,16 @@ describe('useOnlineVideoPlayback – volume', () => {
 })
 
 // ---------------------------------------------------------------------------
-// No-op methods must not throw
+// Remaining no-op methods must not throw
 // ---------------------------------------------------------------------------
 
 describe('useOnlineVideoPlayback – no-op methods', () => {
-  it('stepFrame, jumpToNextKeyframe, jumpToPreviousKeyframe, changePlaybackRate do not throw', async () => {
+  it('jumpToNextKeyframe and jumpToPreviousKeyframe do not throw', async () => {
     const { result, fireReady } = await setup()
     fireReady()
 
-    expect(() => result.current.stepFrame('forward')).not.toThrow()
-    expect(() => result.current.stepFrame('backward')).not.toThrow()
     expect(() => result.current.jumpToNextKeyframe()).not.toThrow()
     expect(() => result.current.jumpToPreviousKeyframe()).not.toThrow()
-    expect(() => result.current.changePlaybackRate(2)).not.toThrow()
-    expect(() => result.current.adjustPlaybackRate('faster')).not.toThrow()
   })
 
   it('scrub methods do not throw and return correct stubs', async () => {

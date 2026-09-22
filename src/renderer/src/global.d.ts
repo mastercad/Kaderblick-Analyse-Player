@@ -32,6 +32,7 @@ interface YTPlayer {
   getDuration(): number
   getPlayerState(): number
   setVolume(volume: number): void
+  setPlaybackRate(suggestedRate: number): void
   mute(): void
   unMute(): void
   destroy(): void
@@ -49,6 +50,7 @@ interface VimeoPlayer {
   getCurrentTime(): Promise<number>
   getDuration(): Promise<number>
   setVolume(volume: number): Promise<void>
+  setPlaybackRate(playbackRate: number): Promise<number>
   on(event: 'timeupdate', callback: (data: { seconds: number; duration: number }) => void): void
   on(event: 'play' | 'pause' | 'ended', callback: () => void): void
   on(event: 'error', callback: (data: { message: string }) => void): void

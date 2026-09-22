@@ -3,7 +3,7 @@ import type { RefObject } from 'react'
 import { findActiveSegmentIndex, getNextSegmentIndex, getPreviousSegmentIndex, resolveSegmentSequenceStartIndex } from '../../../../common/segmentUtils'
 import { getSegmentPlaybackTransition } from '../../../../common/segmentPlayback'
 import type { Segment, VideoFileDescriptor } from '../../../../common/types'
-import { PLAYBACK_RATES, PREVIOUS_SEGMENT_REPEAT_WINDOW_MS } from './playerTypes'
+import { FRAME_STEP_SECONDS, PLAYBACK_RATES, PREVIOUS_SEGMENT_REPEAT_WINDOW_MS } from './playerTypes'
 import type { PreviousSegmentNavigationResult } from './playerTypes'
 
 // ─── Module-level API loading ─────────────────────────────────────────────────
@@ -63,6 +63,7 @@ interface NormalisedPlayer {
   seekTo(seconds: number): void
   getCurrentTime(): number | Promise<number>
   setVolume(zeroToOne: number): void
+  setPlaybackRate(rate: number): void
   destroy(): void
 }
 
@@ -141,8 +142,10 @@ export function useOnlineVideoPlayback({
   const pendingAutoStartSegmentsRef = useRef(false)
   const pendingStartFromLastSegmentRef = useRef(false)
   const segmentsRef = useRef(segments)
+  const repeatSingleSegmentRef = useRef(repeatSingleSegment)
 
   // Keep segment refs in sync
+  repeatSingleSegmentRef.current = repeatSingleSegment
   useEffect(() => { segmentsRef.current = segments }, [segments])
   useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
   useEffect(() => { isSegmentModeRef.current = isSegmentMode }, [isSegmentMode])
@@ -307,7 +310,9 @@ export function useOnlineVideoPlayback({
   const handleSegmentBoundary = (): void => {
     const segs = segmentsRef.current
     const idx = sequenceIndexRef.current
-    const transition = getSegmentPlaybackTransition(segs, idx, { repeatSingleSegment })
+    const transition = getSegmentPlaybackTransition(segs, idx, {
+      repeatSingleSegment: repeatSingleSegmentRef.current
+    })
 
     if (transition.action === 'pause') {
       pausePlayback()
@@ -424,7 +429,8 @@ export function useOnlineVideoPlayback({
               5: 'Das Video kann in eingebetteten Playern nicht abgespielt werden.',
               100: 'Das Video wurde nicht gefunden oder ist privat.',
               101: 'Der Einbettung dieses Videos wurde vom Eigentümer nicht zugelassen.',
-              150: 'Der Einbettung dieses Videos wurde vom Eigentümer nicht zugelassen.'
+              150: 'Der Einbettung dieses Videos wurde vom Eigentümer nicht zugelassen.',
+              153: 'YouTube konnte den Analyse-Player nicht identifizieren.'
             }
             const msg = codes[event.data] ?? `YouTube-Fehler (Code ${event.data})`
             setVideoError(msg)
@@ -441,6 +447,7 @@ export function useOnlineVideoPlayback({
         seekTo: (s) => ytPlayer.seekTo(s, true),
         getCurrentTime: () => ytPlayer.getCurrentTime(),
         setVolume: (v) => { ytPlayer.setVolume(v * 100); if (v === 0) ytPlayer.mute(); else ytPlayer.unMute() },
+        setPlaybackRate: (rate) => ytPlayer.setPlaybackRate(rate),
         destroy: () => ytPlayer.destroy()
       }
     }
@@ -462,6 +469,7 @@ export function useOnlineVideoPlayback({
         seekTo: (s) => { void vimeoPlayer.setCurrentTime(s) },
         getCurrentTime: () => vimeoPlayer.getCurrentTime(),
         setVolume: (v) => { void vimeoPlayer.setVolume(v) },
+        setPlaybackRate: (rate) => { void vimeoPlayer.setPlaybackRate(rate) },
         destroy: () => { void vimeoPlayer.destroy() }
       }
 
@@ -637,12 +645,29 @@ export function useOnlineVideoPlayback({
     seekTo(next)
   }
 
-  const changePlaybackRate = (_rate: number): void => {
-    // YouTube and Vimeo embedded players don't support programmatic rate changes via this API
+  const stepFrame = (direction: 'forward' | 'backward'): void => {
+    const player = playerRef.current
+    if (!player) return
+    const resumePlayback = isPlayingRef.current
+    if (resumePlayback) player.pause()
+    const delta = direction === 'forward' ? FRAME_STEP_SECONDS : -FRAME_STEP_SECONDS
+    seekTo(Math.max(0, Math.min(durationRef.current, currentTimeRef.current + delta)))
+    if (resumePlayback) player.play()
   }
 
-  const adjustPlaybackRate = (_direction: 'faster' | 'slower'): void => {
-    // Not supported for online players
+  const changePlaybackRate = (rate: number): void => {
+    if (!playerRef.current || !PLAYBACK_RATES.includes(rate)) return
+    playerRef.current.setPlaybackRate(rate)
+    setPlaybackRate(rate)
+  }
+
+  const adjustPlaybackRate = (direction: 'faster' | 'slower'): void => {
+    const currentIndex = PLAYBACK_RATES.indexOf(playbackRate)
+    if (direction === 'faster' && currentIndex < PLAYBACK_RATES.length - 1) {
+      changePlaybackRate(PLAYBACK_RATES[currentIndex + 1])
+    } else if (direction === 'slower' && currentIndex > 0) {
+      changePlaybackRate(PLAYBACK_RATES[currentIndex - 1])
+    }
   }
 
   const toggleReversePlayback = (): string | null =>
@@ -741,7 +766,7 @@ export function useOnlineVideoPlayback({
     jumpToSegment,
     jumpToNextSegment,
     jumpToPreviousSegment,
-    stepFrame: (_direction: 'forward' | 'backward'): void => { /* not supported */ },
+    stepFrame,
     jumpBySeconds,
     jumpToNextKeyframe: (): void => { /* not supported */ },
     jumpToPreviousKeyframe: (): void => { /* not supported */ },
