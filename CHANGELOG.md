@@ -1,3 +1,10 @@
+## [2.5.1](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.5.0...v2.5.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* **player:** repair online video playback controls ([61ccc60](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/61ccc6009ccda9e7fe04f39b6960de43d6766597))
+
 # [2.5.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.4.3...v2.5.0) (2026-09-11)
 
 
