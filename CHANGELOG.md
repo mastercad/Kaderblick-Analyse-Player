@@ -1,3 +1,10 @@
+## [2.5.2](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.5.1...v2.5.2) (2026-09-23)
+
+
+### Bug Fixes
+
+* stabilize player layout and release artifacts ([66ba117](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/66ba117644a18f23cb7cfb78373d5ba661196dc6))
+
 ## [2.5.1](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.5.0...v2.5.1) (2026-09-22)
 
 
