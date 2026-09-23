@@ -1,3 +1,5 @@
+## [2.5.3](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.5.2...v2.5.3) (2026-09-23)
+
 ## [2.5.2](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.5.1...v2.5.2) (2026-09-23)
 
 
