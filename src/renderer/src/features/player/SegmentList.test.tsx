@@ -20,6 +20,35 @@ const twoSegments = [
 ]
 
 describe('SegmentList', () => {
+  it('can collapse and expand the segment sidebar', () => {
+    const onCollapsedChange = vi.fn()
+    const { rerender } = render(
+      <SegmentList
+        segments={twoSegments}
+        activeSegmentIndex={-1}
+        collapsed={false}
+        onCollapsedChange={onCollapsedChange}
+        onSelectSegment={() => undefined}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Segmentleiste einklappen' }))
+    expect(onCollapsedChange).toHaveBeenCalledWith(true)
+
+    rerender(
+      <SegmentList
+        segments={twoSegments}
+        activeSegmentIndex={-1}
+        collapsed
+        onCollapsedChange={onCollapsedChange}
+        onSelectSegment={() => undefined}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: 'Segmentleiste ausklappen' })).toHaveAttribute('aria-expanded', 'false')
+    expect(document.querySelector('.segment-list')).toHaveAttribute('hidden')
+  })
+
   it('renders a card for each segment', () => {
     render(<SegmentList segments={twoSegments} activeSegmentIndex={-1} onSelectSegment={() => {}} />)
 

@@ -78,7 +78,9 @@ Der Build erzeugt Pakete für:
 - **Windows** – NSIS-Installer + Portable
 - **macOS** – DMG + ZIP
 
-Ausgabe landet im Verzeichnis `release/`.
+Die Ausgabe landet im Verzeichnis `release/`. Jeder Paketname enthält die aktuelle
+Version aus `package.json`, zum Beispiel
+`kaderblick-analyse-player-2.5.1-linux-x86_64.AppImage`.
 
 Releases werden über [semantic-release](https://semantic-release.gitbook.io/) automatisiert:
 

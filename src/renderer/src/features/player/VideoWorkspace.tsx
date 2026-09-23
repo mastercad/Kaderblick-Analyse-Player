@@ -55,6 +55,7 @@ interface KeyboardHudMessage {
 }
 
 const fullscreenOrientationStorageKey = 'kaderblick-fullscreen-orientation-visible'
+const segmentSidebarCollapsedStorageKey = 'kaderblick-segment-sidebar-collapsed'
 
 function FlyoutPinIndicator() {
   return (
@@ -176,6 +177,10 @@ export function VideoWorkspace({
     if (typeof window === 'undefined') return true
     return window.localStorage.getItem(fullscreenOrientationStorageKey) !== 'false'
   })
+  const [segmentSidebarCollapsed, setSegmentSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(segmentSidebarCollapsedStorageKey) === 'true'
+  })
   const keyboardHudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const keyboardHudSequenceRef = useRef(0)
 
@@ -201,6 +206,10 @@ export function VideoWorkspace({
   useEffect(() => {
     window.localStorage.setItem(fullscreenOrientationStorageKey, String(fullscreenOrientationVisible))
   }, [fullscreenOrientationVisible])
+
+  useEffect(() => {
+    window.localStorage.setItem(segmentSidebarCollapsedStorageKey, String(segmentSidebarCollapsed))
+  }, [segmentSidebarCollapsed])
 
   // A closed flyout must not retain focus. Otherwise Space can activate or scroll
   // controls that have already been moved outside the fullscreen viewport.
@@ -236,16 +245,6 @@ export function VideoWorkspace({
 
   // Global keyboard shortcuts
   const onKeyboardShortcut = useEffectEvent((event: KeyboardEvent): void => {
-    if (event.code === 'Space') {
-      event.preventDefault()
-      event.stopPropagation()
-      if (!event.repeat) {
-        showKeyboardHud((playback.isPlaying || playback.isInterstitialCounting) ? 'Ⅱ' : '▶', (playback.isPlaying || playback.isInterstitialCounting) ? 'Angehalten' : 'Fortgesetzt')
-        void playback.togglePlayPause()
-      }
-      return
-    }
-
     const target = event.target as HTMLElement | null
     const isRangeInput = target instanceof HTMLInputElement && target.type === 'range'
     const isTyping =
@@ -256,6 +255,17 @@ export function VideoWorkspace({
         (target instanceof HTMLElement && target.isContentEditable)
       )
     if (isTyping) return
+
+    if (event.code === 'Space') {
+      event.preventDefault()
+      event.stopPropagation()
+      if (!event.repeat) {
+        showKeyboardHud((playback.isPlaying || playback.isInterstitialCounting) ? 'Ⅱ' : '▶', (playback.isPlaying || playback.isInterstitialCounting) ? 'Angehalten' : 'Fortgesetzt')
+        void playback.togglePlayPause()
+      }
+      return
+    }
+
     // Arrow keys on range inputs control the slider — don't intercept them
     if (isRangeInput && (event.code === 'ArrowLeft' || event.code === 'ArrowRight')) return
 
@@ -354,6 +364,13 @@ export function VideoWorkspace({
     const handleKeyDown = (event: KeyboardEvent): void => onKeyboardShortcut(event)
     const suppressSpaceActivation = (event: KeyboardEvent): void => {
       if (event.code !== 'Space') return
+      const target = event.target as HTMLElement | null
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) return
       event.preventDefault()
       event.stopPropagation()
     }
@@ -779,6 +796,16 @@ export function VideoWorkspace({
     />
   )
 
+  const inlineSegmentList = (
+    <SegmentList
+      segments={segments}
+      activeSegmentIndex={playback.activeSegmentIndex}
+      collapsed={segmentSidebarCollapsed}
+      onCollapsedChange={setSegmentSidebarCollapsed}
+      onSelectSegment={(index) => playback.jumpToSegment(index, false, true)}
+    />
+  )
+
   const zoomDockInner = selectedVideo ? (
     <>
       <div className="video-stage__zoom-actions">
@@ -903,7 +930,7 @@ export function VideoWorkspace({
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="workspace-stack">
+    <div className={`workspace-stack${segmentSidebarCollapsed ? ' workspace-stack--segments-collapsed' : ''}`}>
       <section className={`panel player-panel ${isFullscreen ? 'player-panel--fullscreen' : ''}`} ref={playerPanelRef}>
         {!isFullscreen ? playerHeader : null}
 
@@ -1080,7 +1107,7 @@ export function VideoWorkspace({
         )}
       </section>
 
-      {!isFullscreen ? segmentList : null}
+      {!isFullscreen ? inlineSegmentList : null}
     </div>
   )
 }

@@ -133,7 +133,7 @@ describe('VideoWorkspace – Splash Screen', () => {
     expect(document.querySelector('.video-splash')).toBeNull()
   })
 
-  it('uses Space for playback even when the splash title has focus', async () => {
+  it('allows spaces in the splash title without starting playback', async () => {
     render(
       <VideoWorkspace {...baseProps} selectedVideo={directVideo}>
         <div />
@@ -142,14 +142,19 @@ describe('VideoWorkspace – Splash Screen', () => {
 
     const videoEl = document.querySelector('video')!
     videoEl.play = vi.fn().mockResolvedValue(undefined)
+    enterFullscreen()
     const title = document.querySelector('.video-splash__title')!
+    let keyDownWasAllowed = false
+    let keyUpWasAllowed = false
     await act(async () => {
-      fireEvent.keyDown(title, { code: 'Space', key: ' ' })
-      fireEvent.keyUp(title, { code: 'Space', key: ' ' })
+      keyDownWasAllowed = fireEvent.keyDown(title, { code: 'Space', key: ' ' })
+      keyUpWasAllowed = fireEvent.keyUp(title, { code: 'Space', key: ' ' })
       await Promise.resolve()
     })
 
-    expect(videoEl.play).toHaveBeenCalledOnce()
-    expect(document.querySelector('.video-splash')).toHaveClass('video-splash--hidden')
+    expect(keyDownWasAllowed).toBe(true)
+    expect(keyUpWasAllowed).toBe(true)
+    expect(videoEl.play).not.toHaveBeenCalled()
+    expect(document.querySelector('.video-splash')).not.toHaveClass('video-splash--hidden')
   })
 })

@@ -37,7 +37,7 @@ jobs:
       - name: Linux Artefakte hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: linux-release
+          name: linux-release-${{ inputs.tag }}
           path: |
             release/*.AppImage
             release/*.deb
@@ -70,7 +70,7 @@ jobs:
       - name: Windows Artefakte hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: windows-release
+          name: windows-release-${{ inputs.tag }}
           path: |
             release/*-setup-*.exe
             release/*-portable-*.exe
@@ -103,7 +103,7 @@ jobs:
       - name: macOS Artefakte hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: macos-release
+          name: macos-release-${{ inputs.tag }}
           path: |
             release/*.dmg
             release/*.zip
@@ -121,19 +121,19 @@ jobs:
       - name: Linux Artefakte herunterladen
         uses: actions/download-artifact@v4
         with:
-          name: linux-release
+          name: linux-release-${{ inputs.tag }}
           path: dist-artifacts/linux
 
       - name: Windows Artefakte herunterladen
         uses: actions/download-artifact@v4
         with:
-          name: windows-release
+          name: windows-release-${{ inputs.tag }}
           path: dist-artifacts/windows
 
       - name: macOS Artefakte herunterladen
         uses: actions/download-artifact@v4
         with:
-          name: macos-release
+          name: macos-release-${{ inputs.tag }}
           path: dist-artifacts/macos
 
       - name: Release-Dateien hochladen
