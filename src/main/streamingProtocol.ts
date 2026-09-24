@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { protocol } from 'electron'
 import { KVIDEO_SCHEME } from '../common/streaming'
+import { registerChildProcess } from './childProcessRegistry'
 
 interface CachedVideoMeta {
   codecName?: string
@@ -64,7 +65,7 @@ export const registerStreamingProtocol = (): void => {
         'pipe:1'
       ]
 
-      const child = spawn(ffmpegBin(), ffmpegArgs, { windowsHide: true })
+      const child = registerChildProcess(spawn(ffmpegBin(), ffmpegArgs, { windowsHide: true }))
 
       child.stderr.on('data', () => { /* noop */ })
 

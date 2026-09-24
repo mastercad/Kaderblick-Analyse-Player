@@ -258,7 +258,7 @@ describe('VideoWorkspace', () => {
 
     const controlsTrigger = screen.getByRole('button', { name: 'Wiedergabe und Timeline einblenden' })
     fireEvent.click(controlsTrigger)
-    const jumpInput = screen.getByLabelText('Springe zu Spielzeit')
+    const jumpInput = screen.getByLabelText(/Springe zu Zeit/)
     act(() => { jumpInput.focus() })
     fireEvent.change(jumpInput, { target: { value: '09:00' } })
     act(() => { controlsTrigger.focus() })
@@ -272,6 +272,122 @@ describe('VideoWorkspace', () => {
       await Promise.resolve()
     })
     expect(video.play).toHaveBeenCalledOnce()
+  })
+
+  it('seeks to 62:00 in a 35-minute second half instead of comparing match time with video duration', () => {
+    render(
+      <VideoWorkspace
+        selectedVideo={{
+          ...selectedVideo,
+          matchHalf: 2,
+          kickoffVideoSeconds: 2 * 60,
+          matchDurationSeconds: 35 * 60
+        }}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video')!
+    Object.defineProperty(video, 'duration', { configurable: true, value: 55 * 60 })
+    fireEvent.loadedMetadata(video)
+
+    const jumpInput = screen.getByLabelText(/Springe zu Zeit/)
+    fireEvent.change(jumpInput, { target: { value: '62:00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Springen' }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(video.currentTime).toBe(29 * 60)
+
+    fireEvent.change(jumpInput, { target: { value: '36:00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Springen' }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(video.currentTime).toBe(3 * 60)
+  })
+
+  it('switches from the second half to the grouped first-half video for 23:10', () => {
+    const firstHalf = {
+      ...selectedVideo,
+      path: '/tmp/spiel1-hz1.mp4',
+      fileName: 'spiel1-hz1.mp4',
+      matchGroupId: 'Spiel 1',
+      matchHalf: 1 as const,
+      kickoffVideoSeconds: 2 * 60,
+      matchDurationSeconds: 35 * 60
+    }
+    const secondHalf = {
+      ...selectedVideo,
+      path: '/tmp/spiel1-hz2.mp4',
+      fileName: 'spiel1-hz2.mp4',
+      matchGroupId: 'Spiel 1',
+      matchHalf: 2 as const,
+      kickoffVideoSeconds: 3 * 60,
+      matchDurationSeconds: 35 * 60
+    }
+    const otherMatchFirstHalf = {
+      ...firstHalf,
+      path: '/tmp/spiel2-hz1.mp4',
+      fileName: 'spiel2-hz1.mp4',
+      matchGroupId: 'Spiel 2'
+    }
+    const onMatchVideoSeek = vi.fn()
+
+    render(
+      <VideoWorkspace
+        selectedVideo={secondHalf}
+        matchVideos={[otherMatchFirstHalf, firstHalf, secondHalf]}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+        onMatchVideoSeek={onMatchVideoSeek}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    fireEvent.change(screen.getByLabelText(/Springe zu Zeit/), { target: { value: '23:10' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Springen' }))
+
+    expect(onMatchVideoSeek).toHaveBeenCalledWith(firstHalf, 25 * 60 + 10)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('applies a pending match-time seek after the target video has loaded', () => {
+    const onSeekOnLoadApplied = vi.fn()
+    render(
+      <VideoWorkspace
+        selectedVideo={selectedVideo}
+        seekOnLoadSeconds={23 * 60 + 10}
+        onSeekOnLoadApplied={onSeekOnLoadApplied}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const video = document.querySelector('video')!
+    Object.defineProperty(video, 'duration', { configurable: true, value: 55 * 60 })
+    Object.defineProperty(video, 'videoWidth', { configurable: true, value: 1920 })
+    Object.defineProperty(video, 'videoHeight', { configurable: true, value: 1080 })
+    fireEvent.loadedMetadata(video)
+
+    expect(video.currentTime).toBe(23 * 60 + 10)
+    expect(onSeekOnLoadApplied).toHaveBeenCalledOnce()
   })
 
   it('shows transient fullscreen feedback for keyboard actions', () => {

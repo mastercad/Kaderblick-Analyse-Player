@@ -59,15 +59,50 @@ export interface VideoFileDescriptor {
   playbackHint?: string
   onlinePlatform?: 'youtube' | 'vimeo'
   onlineVideoId?: string
+  matchGroupId?: string
   matchHalf?: 1 | 2
   kickoffVideoSeconds?: number
   matchDurationSeconds?: number
 }
 
+export type PlayerJumpTimeMode =
+  | 'video-per-file'
+  | 'video-cumulative'
+  | 'match-per-part'
+  | 'match-cumulative'
+
 export interface VideoPreparationProgress {
   phase: 'idle' | 'analyzing' | 'transcoding' | 'ready' | 'error'
   message: string
   percent?: number
+}
+
+export interface TimelinePreviewFileInfo {
+  size: number
+  mtimeMs: number
+  extension: string
+}
+
+export interface TimelinePreviewFrame {
+  imageUrl: string
+  column: number
+  row: number
+  columns: number
+  rows: number
+}
+
+export interface TimelinePreviewCacheState {
+  coarseComplete: boolean
+  fineComplete: boolean
+  cachedTargets: number[]
+}
+
+export interface TimelinePreviewSheet {
+  phase: 'coarse' | 'fine'
+  targets: number[]
+  columns: number
+  rows: number
+  imageBytes: Uint8Array
 }
 
 export interface CsvFileDescriptor {

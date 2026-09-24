@@ -10,6 +10,8 @@ import { readStoredPresets, writeStoredPresets } from './presetStorage'
 import { initStreamingProtocol, registerStreamingProtocol } from './streamingProtocol'
 import { ffmpegExecutable, getKeyframeTimes, prepareStreamingPlayback } from './videoPlayback'
 import { addYouTubeClientReferer, YOUTUBE_EMBED_URLS } from './youtubeRequestIdentity'
+import { terminateAllChildProcesses } from './childProcessRegistry'
+import { cleanupTimelinePreviewCache, getTimelinePreviewCacheState, getTimelinePreviewFileInfo, getTimelinePreviewFrame, markTimelinePreviewPhaseComplete, readTimelinePreviewRange, storeTimelinePreviewSheet } from './timelinePreviewStorage'
 
 
 protocol.registerSchemesAsPrivileged([{
@@ -99,6 +101,12 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('video:prepareStreamingPlayback', (_, sourcePath: string) => prepareStreamingPlayback(sourcePath))
   ipcMain.handle('video:getKeyframeTimes', (_, sourcePath: string) => getKeyframeTimes(sourcePath))
+  ipcMain.handle('preview:fileInfo', (_, sourcePath: string) => getTimelinePreviewFileInfo(sourcePath))
+  ipcMain.handle('preview:readRange', (_, sourcePath: string, offset: number, length: number) => readTimelinePreviewRange(sourcePath, offset, length))
+  ipcMain.handle('preview:cacheState', (_, sourcePath: string) => getTimelinePreviewCacheState(sourcePath))
+  ipcMain.handle('preview:storeSheet', (_, sourcePath: string, sheet) => storeTimelinePreviewSheet(sourcePath, sheet))
+  ipcMain.handle('preview:markComplete', (_, sourcePath: string, phase) => markTimelinePreviewPhaseComplete(sourcePath, phase))
+  ipcMain.handle('preview:getFrame', (_, sourcePath: string, seconds: number) => getTimelinePreviewFrame(sourcePath, seconds))
   ipcMain.handle('dialog:pickCsvFile', () => pickCsvFile())
   ipcMain.handle('dialog:saveCsvFile', (_, content: string) => saveCsvFile(content))
   ipcMain.handle('presets:load', () => readStoredPresets())
@@ -114,6 +122,7 @@ app.whenReady().then(() => {
   ipcMain.handle('fs:fileExists', (_, filePath: string) => existsSync(filePath))
 
   createWindow()
+  void cleanupTimelinePreviewCache()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -127,3 +136,6 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+app.on('before-quit', terminateAllChildProcesses)
+process.once('exit', terminateAllChildProcesses)

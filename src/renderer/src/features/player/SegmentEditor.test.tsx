@@ -88,6 +88,38 @@ describe('SegmentEditor', () => {
         expect.objectContaining({ matchHalf: 2, kickoffVideoSeconds: 161, matchDurationSeconds: 2700 })
       ])
     })
+
+    it('groups the two halves of each match without sharing settings with another match', () => {
+      const onVideoSettingsChange = vi.fn()
+      const videos = [
+        makeVideo('spiel1-hz1.mp4'),
+        makeVideo('spiel1-hz2.mp4'),
+        makeVideo('spiel2-hz1.mp4')
+      ]
+      render(
+        <SegmentEditor
+          videos={videos}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onVideoSettingsChange={onVideoSettingsChange}
+          onClose={() => {}}
+        />
+      )
+
+      fireEvent.change(screen.getByRole('textbox', { name: 'Spiel für spiel1-hz1.mp4' }), { target: { value: 'Spiel 1' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Dauer je Halbzeit für spiel1-hz1.mp4' }), { target: { value: '35:00' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Spiel für spiel1-hz2.mp4' }), { target: { value: 'Spiel 1' } })
+      fireEvent.change(screen.getByRole('combobox', { name: 'Halbzeit für spiel1-hz2.mp4' }), { target: { value: '2' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Spiel für spiel2-hz1.mp4' }), { target: { value: 'Spiel 2' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Anstoß im Video für spiel2-hz1.mp4' }), { target: { value: '12:00' } })
+
+      expect(onVideoSettingsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({ matchGroupId: 'Spiel 1', matchHalf: 1, matchDurationSeconds: 35 * 60 }),
+        expect.objectContaining({ matchGroupId: 'Spiel 1', matchHalf: 2, matchDurationSeconds: 35 * 60 }),
+        expect.objectContaining({ matchGroupId: 'Spiel 2', matchHalf: 1, kickoffVideoSeconds: 12 * 60, matchDurationSeconds: 45 * 60 })
+      ])
+    })
   })
 
   describe('loading segments', () => {

@@ -86,6 +86,7 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [videoSettings, setVideoSettings] = useState(() => videos.map((video) => ({
     path: video.path,
+    matchGroupInput: video.matchGroupId ?? '',
     half: video.matchHalf ?? 1,
     kickoffInput: formatClockTime(video.kickoffVideoSeconds ?? 0),
     matchDurationInput: formatClockTime(video.matchDurationSeconds ?? 45 * 60)
@@ -171,7 +172,29 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
   const hasInvalidRows = drafts.some((d) => !isDraftValid(d))
   const validCount = drafts.filter(isDraftValid).length
   const updateVideoSetting = (path: string, changes: Partial<(typeof videoSettings)[number]>) => {
-    const nextSettings = videoSettings.map((setting) => setting.path === path ? { ...setting, ...changes } : setting)
+    let nextSettings = videoSettings.map((setting) => setting.path === path ? { ...setting, ...changes } : setting)
+    const changedSetting = nextSettings.find((setting) => setting.path === path)
+    const changedGroupId = changedSetting?.matchGroupInput.trim() ?? ''
+
+    // A game's half duration is shared by all of its videos. When a video is
+    // assigned to an existing game, adopt that game's duration. Editing the
+    // duration afterwards updates both halves together while kickoff positions
+    // remain independent per video.
+    if (changedSetting && 'matchGroupInput' in changes && changedGroupId) {
+      const existingGroupSetting = videoSettings.find((setting) =>
+        setting.path !== path && setting.matchGroupInput.trim() === changedGroupId
+      )
+      if (existingGroupSetting) {
+        nextSettings = nextSettings.map((setting) => setting.path === path
+          ? { ...setting, matchDurationInput: existingGroupSetting.matchDurationInput }
+          : setting)
+      }
+    }
+    if (changedSetting && 'matchDurationInput' in changes && changedGroupId) {
+      nextSettings = nextSettings.map((setting) => setting.matchGroupInput.trim() === changedGroupId
+        ? { ...setting, matchDurationInput: changedSetting.matchDurationInput }
+        : setting)
+    }
     setVideoSettings(nextSettings)
     if (nextSettings.some((setting) => {
       const kickoff = parseTimeInput(setting.kickoffInput)
@@ -184,6 +207,7 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
       const setting = nextSettings.find((candidate) => candidate.path === video.path)
       return setting ? {
         ...video,
+        matchGroupId: setting.matchGroupInput.trim() || undefined,
         matchHalf: setting.half as 1 | 2,
         kickoffVideoSeconds: parseTimeInput(setting.kickoffInput)!,
         matchDurationSeconds: parseTimeInput(setting.matchDurationInput)!
@@ -206,13 +230,22 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
           <section className="segment-editor__match-settings" aria-labelledby="match-settings-title">
             <div>
               <h3 id="match-settings-title">Video-Zeitzuordnung</h3>
-              <p>Lege Halbzeit, Spielzeit und die Videoposition des Anstoßes fest.</p>
+              <p>Ordne zusammengehörige Halbzeiten einem Spiel zu und lege deren Zeitachsen fest.</p>
             </div>
             {videoSettings.map((setting) => {
               const video = videos.find((candidate) => candidate.path === setting.path)
               return (
                 <div className="segment-editor__match-row" key={setting.path}>
                   <strong title={setting.path}>{video?.fileName ?? setting.path}</strong>
+                  <label>
+                    Spiel
+                    <input
+                      aria-label={`Spiel für ${video?.fileName ?? setting.path}`}
+                      value={setting.matchGroupInput}
+                      placeholder="z. B. Spiel 1"
+                      onChange={(event) => updateVideoSetting(setting.path, { matchGroupInput: event.target.value })}
+                    />
+                  </label>
                   <label>
                     Halbzeit
                     <select aria-label={`Halbzeit für ${video?.fileName ?? setting.path}`} value={setting.half} onChange={(event) => updateVideoSetting(setting.path, { half: Number(event.target.value) as 1 | 2 })}>
@@ -225,8 +258,8 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
                     <input aria-label={`Anstoß im Video für ${video?.fileName ?? setting.path}`} value={setting.kickoffInput} placeholder="z. B. 02:41" onChange={(event) => updateVideoSetting(setting.path, { kickoffInput: event.target.value })} />
                   </label>
                   <label>
-                    Spielzeit
-                    <input aria-label={`Spielzeit für ${video?.fileName ?? setting.path}`} value={setting.matchDurationInput} placeholder="45:00" onChange={(event) => updateVideoSetting(setting.path, { matchDurationInput: event.target.value })} />
+                    Dauer je Halbzeit
+                    <input aria-label={`Dauer je Halbzeit für ${video?.fileName ?? setting.path}`} value={setting.matchDurationInput} placeholder="45:00" onChange={(event) => updateVideoSetting(setting.path, { matchDurationInput: event.target.value })} />
                   </label>
                   <button className="button button--subtle" type="button" disabled={activeVideoPath !== undefined && activeVideoPath !== setting.path} title={activeVideoPath !== undefined && activeVideoPath !== setting.path ? 'Dafür zuerst dieses Video im Player auswählen' : 'Aktuelle Position des Players übernehmen'} onClick={() => updateVideoSetting(setting.path, { kickoffInput: formatClockTime(getCurrentTime()) })}>Aktuelle Position</button>
                 </div>

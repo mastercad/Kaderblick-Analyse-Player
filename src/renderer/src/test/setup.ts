@@ -20,7 +20,15 @@ if (typeof window.MediaError === 'undefined') {
 // "An update to VideoWorkspace inside a test was not wrapped in act" warnings.
 Object.defineProperty(window, 'desktopApi', {
   value: {
-    getKeyframeTimes: (): Promise<number[]> => new Promise(() => {})
+    getKeyframeTimes: (): Promise<number[]> => new Promise(() => {}),
+    // Preview generation is tested separately. Keeping discovery pending here
+    // prevents background preview state updates from leaking into unrelated UI tests.
+    getTimelinePreviewFileInfo: (): Promise<{ size: number; mtimeMs: number; extension: string }> => new Promise(() => {}),
+    readTimelinePreviewRange: (): Promise<Uint8Array> => Promise.resolve(new Uint8Array()),
+    getTimelinePreviewCacheState: (): Promise<{ coarseComplete: boolean; fineComplete: boolean; cachedTargets: number[] }> => Promise.resolve({ coarseComplete: false, fineComplete: true, cachedTargets: [] }),
+    storeTimelinePreviewSheet: (): Promise<void> => Promise.resolve(),
+    markTimelinePreviewPhaseComplete: (): Promise<void> => Promise.resolve(),
+    getTimelinePreviewFrame: (): Promise<null> => Promise.resolve(null)
   },
   writable: true,
   configurable: true

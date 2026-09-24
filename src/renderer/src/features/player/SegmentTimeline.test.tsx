@@ -51,6 +51,29 @@ describe('SegmentTimeline', () => {
 
     expect(onSeek).toHaveBeenCalledWith(50)
   })
+
+  it('shows a storyboard cell and reports the hovered time', () => {
+    const onPreviewTimeChange = vi.fn()
+    render(
+      <SegmentTimeline
+        duration={100}
+        currentTime={0}
+        activeSegmentIndex={-1}
+        segments={[]}
+        onSeek={() => undefined}
+        previewFrame={{ imageUrl: 'data:image/webp;base64,dGVzdA==', column: 2, row: 1, columns: 5, rows: 5 }}
+        previewStatus={{ phase: 'fine', percent: 40, message: 'Vorschau wird verfeinert' }}
+        onPreviewTimeChange={onPreviewTimeChange}
+      />
+    )
+    const timeline = screen.getByRole('button', { name: 'Zeitleiste' })
+    Object.defineProperty(timeline, 'getBoundingClientRect', { value: () => ({ left: 0, width: 200 }), configurable: true })
+    fireEvent.mouseMove(timeline, { clientX: 50 })
+    expect(onPreviewTimeChange).toHaveBeenCalledWith(25)
+    expect(timeline.querySelector('.timeline__preview-image')).toHaveStyle({ backgroundSize: '500% 500%' })
+    expect(screen.getByTestId('timeline-preview-progress')).toHaveStyle({ width: '40%' })
+  })
+
 })
 
 // ---------------------------------------------------------------------------

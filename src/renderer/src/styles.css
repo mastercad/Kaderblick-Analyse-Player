@@ -2241,6 +2241,7 @@ kbd {
 }
 
 .timeline__track,
+.timeline__preview-progress,
 .timeline__progress {
   position: absolute;
   left: 0;
@@ -2253,6 +2254,20 @@ kbd {
 .timeline__track {
   width: 100%;
   background: var(--panel-muted-strong);
+}
+
+.timeline__preview-progress {
+  min-width: 3px;
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.32) 0 5px, rgba(255, 255, 255, 0.14) 5px 10px);
+  pointer-events: none;
+}
+
+.timeline__preview-progress--ready {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.timeline__preview-progress--paused {
+  opacity: 0.55;
 }
 
 .timeline__progress {
@@ -2312,6 +2327,41 @@ kbd {
   pointer-events: none;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
   z-index: 10;
+}
+
+.timeline__tooltip--preview {
+  display: grid;
+  gap: 5px;
+  width: 176px;
+  padding: 5px;
+  overflow: hidden;
+  background: #10141b;
+  color: white;
+}
+
+.timeline__preview-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 5px;
+  background-color: black;
+  background-repeat: no-repeat;
+}
+
+.timeline__preview-loading {
+  display: grid;
+  place-items: center;
+  min-height: 82px;
+  padding: 6px;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.timeline__preview-time {
+  padding: 0 3px 1px;
+  text-align: center;
 }
 
 .segment-list {
@@ -3259,6 +3309,7 @@ kbd {
 }
 
 .player-control-deck .timeline__track,
+.player-control-deck .timeline__preview-progress,
 .player-control-deck .timeline__progress {
   height: 5px;
 }
@@ -3742,6 +3793,7 @@ kbd {
 }
 
 .fullscreen-flyout-panel--bottom .timeline__track,
+.fullscreen-flyout-panel--bottom .timeline__preview-progress,
 .fullscreen-flyout-panel--bottom .timeline__progress {
   height: 5px;
 }
@@ -4103,7 +4155,7 @@ kbd {
 
 .segment-editor__match-row {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) 140px 155px 125px auto;
+  grid-template-columns: minmax(150px, 1fr) 130px 120px 155px 125px auto;
   align-items: end;
   gap: 10px;
   width: 100%;
@@ -4143,6 +4195,48 @@ kbd {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.82rem;
+}
+
+.settings-dialog {
+  max-width: 680px;
+}
+
+.settings-dialog__intro {
+  margin: 18px 0 14px;
+  color: var(--text-soft);
+}
+
+.settings-dialog__options {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.settings-dialog__options legend {
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.settings-dialog__option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.settings-dialog__option span,
+.settings-dialog__option small {
+  display: block;
+}
+
+.settings-dialog__option small {
+  margin-top: 3px;
+  color: var(--text-soft);
 }
 
 .segment-editor__table th {

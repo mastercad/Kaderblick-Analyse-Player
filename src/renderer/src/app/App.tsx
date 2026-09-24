@@ -5,9 +5,10 @@ import { builtInFilterPresets, defaultFilterSettings } from '../../../common/fil
 import { areFilterSettingsEqual, mergeCustomPresets, sanitizeFilterSettings } from '../../../common/filterUtils'
 import { matchSegmentsToVideo, matchSegmentsToVideos, parseSegmentsCsv, interpolateSegmentTitles } from '../../../common/segmentUtils'
 import { formatClockTime } from '../../../common/timeUtils'
-import type { AppInfo, AppSettingsExport, CsvFileDescriptor, FilterPreset, FilterSettings, Segment, SegmentEditorDraft, SessionSnapshot, VideoFileDescriptor, VideoPreparationProgress } from '../../../common/types'
+import type { AppInfo, AppSettingsExport, CsvFileDescriptor, FilterPreset, FilterSettings, PlayerJumpTimeMode, Segment, SegmentEditorDraft, SessionSnapshot, VideoFileDescriptor, VideoPreparationProgress } from '../../../common/types'
 import { AboutDialog } from '../features/app/AboutDialog'
 import { SessionRestoreDialog } from '../features/app/SessionRestoreDialog'
+import { SettingsDialog } from '../features/app/SettingsDialog'
 import { StartScreen } from '../features/app/StartScreen'
 import { FilterOverlay } from '../features/filters/FilterOverlay'
 import { FilterPresetSaveDialog } from '../features/filters/FilterPresetSaveDialog'
@@ -24,6 +25,14 @@ const sessionTitleStorageKey = 'kaderblick-session-title'
 const interstitialDurationStorageKey = 'kaderblick-interstitial-duration'
 const interstitialLogoStorageKey = 'kaderblick-interstitial-logo'
 const sessionSnapshotKey = 'kaderblick-session-snapshot'
+const playerJumpTimeModeStorageKey = 'kaderblick-player-jump-time-mode'
+
+const loadPlayerJumpTimeMode = (): PlayerJumpTimeMode => {
+  const stored = window.localStorage.getItem(playerJumpTimeModeStorageKey)
+  return stored === 'video-per-file' || stored === 'video-cumulative' || stored === 'match-per-part' || stored === 'match-cumulative'
+    ? stored
+    : 'match-cumulative'
+}
 
 function loadStoredSessionSnapshot(): SessionSnapshot | null {
   try {
@@ -67,6 +76,8 @@ export function App() {
   const [filterOverlayVisible, setFilterOverlayVisible] = useState(false)
   const [repeatSingleSegment, setRepeatSingleSegment] = useState(false)
   const [aboutDialogVisible, setAboutDialogVisible] = useState(false)
+  const [settingsDialogVisible, setSettingsDialogVisible] = useState(false)
+  const [playerJumpTimeMode, setPlayerJumpTimeMode] = useState<PlayerJumpTimeMode>(loadPlayerJumpTimeMode)
   const [appInfo, setAppInfo] = useState<AppInfo>(defaultAppInfo)
   const [presetSaveDialogVisible, setPresetSaveDialogVisible] = useState(false)
   const [presetSaveMode, setPresetSaveMode] = useState<'new' | 'save'>('save')
@@ -78,6 +89,7 @@ export function App() {
   const [isRecoveringPlayback, setIsRecoveringPlayback] = useState(false)
   const [autoPlayRecoveredVideo, setAutoPlayRecoveredVideo] = useState(false)
   const [autoStartSegmentsFromEnd, setAutoStartSegmentsFromEnd] = useState(false)
+  const [pendingMatchSeek, setPendingMatchSeek] = useState<{ videoPath: string; videoSeconds: number } | null>(null)
   const [streamingConfirmFor, setStreamingConfirmFor] = useState<{ video: VideoFileDescriptor; index: number } | null>(null)
   const [segmentEditorOpen, setSegmentEditorOpen] = useState(false)
   const [segmentEditorDrafts, setSegmentEditorDrafts] = useState<SegmentEditorDraft[]>()
@@ -146,6 +158,11 @@ export function App() {
   const handleSetInterstitialDuration = (seconds: number): void => {
     setInterstitialDuration(seconds)
     window.localStorage.setItem(interstitialDurationStorageKey, String(seconds))
+  }
+
+  const handlePlayerJumpTimeModeChange = (mode: PlayerJumpTimeMode): void => {
+    setPlayerJumpTimeMode(mode)
+    window.localStorage.setItem(playerJumpTimeModeStorageKey, mode)
   }
 
   const selectedVideo = videoLibrary[activeVideoIndex]
@@ -320,6 +337,7 @@ export function App() {
   }
 
   const handleSelectVideo = (index: number): void => {
+    setPendingMatchSeek(null)
     isRecoveringPlaybackRef.current = false
     setIsRecoveringPlayback(false)
     const wasPlaying = isPlayingRef.current
@@ -329,6 +347,16 @@ export function App() {
     setAutoStartSegmentsOnLoad(isSegmentModeRef.current && hasSegments)
     setAutoStartSegmentsFromEnd(false)
     setActiveVideoIndex(index)
+  }
+
+  const handleMatchVideoSeek = (video: VideoFileDescriptor, videoSeconds: number): void => {
+    const targetIndex = videoLibrary.findIndex((candidate) => candidate.path === video.path)
+    if (targetIndex < 0) return
+    setPendingMatchSeek({ videoPath: video.path, videoSeconds })
+    setAutoPlayRecoveredVideo(isPlayingRef.current)
+    setAutoStartSegmentsOnLoad(false)
+    setAutoStartSegmentsFromEnd(false)
+    setActiveVideoIndex(targetIndex)
   }
 
   const handleAllSegmentsDone = (): void => {
@@ -681,6 +709,14 @@ export function App() {
                       className="header-menu__item"
                       role="menuitem"
                       type="button"
+                      onClick={() => { setSettingsDialogVisible(true); setHeaderMenuOpen(false) }}
+                    >
+                      Einstellungen
+                    </button>
+                    <button
+                      className="header-menu__item"
+                      role="menuitem"
+                      type="button"
                       onClick={() => { setAboutDialogVisible(true); setHeaderMenuOpen(false) }}
                     >
                       Über die App
@@ -725,10 +761,15 @@ export function App() {
             ) : (
               <VideoWorkspace
                 selectedVideo={selectedVideo}
+                matchVideos={videoLibrary}
+                jumpTimeMode={playerJumpTimeMode}
                 segments={displaySegments}
                 isSegmentEditorOpen={segmentEditorOpen}
                 onOpenSegmentEditor={() => setSegmentEditorOpen((prev) => !prev)}
                 onCurrentTimeChange={(t) => { videoCurrentTimeRef.current = t }}
+                seekOnLoadSeconds={pendingMatchSeek?.videoPath === selectedVideo?.path ? pendingMatchSeek.videoSeconds : undefined}
+                onSeekOnLoadApplied={() => setPendingMatchSeek(null)}
+                onMatchVideoSeek={handleMatchVideoSeek}
                 sessionTitle={sessionTitle}
                 onSessionTitleChange={handleSessionTitleChange}
                 interstitialDuration={interstitialDuration}
@@ -757,6 +798,14 @@ export function App() {
                   setAutoPlayRecoveredVideo(false)
                   setAutoStartSegmentsOnLoad(false)
                   setAutoStartSegmentsFromEnd(false)
+
+                  setVideoLibrary((currentVideos) => {
+                    const videoIndex = currentVideos.findIndex((video) => video.path === selectedVideo.path)
+                    if (videoIndex < 0 || currentVideos[videoIndex].durationSeconds === durationSeconds) return currentVideos
+                    const nextVideos = [...currentVideos]
+                    nextVideos[videoIndex] = { ...nextVideos[videoIndex], durationSeconds }
+                    return nextVideos
+                  })
 
                   setStatusMessage(
                     `${selectedVideo.fileName} ist bereit. Dauer ${formatClockTime(durationSeconds)}. ${matchedSegments.length} passende Segmente gefunden.`
@@ -821,6 +870,7 @@ export function App() {
                       />
                     )}
                     <AboutDialog appInfo={appInfo} open={aboutDialogVisible} onClose={() => setAboutDialogVisible(false)} />
+                    <SettingsDialog open={settingsDialogVisible} jumpTimeMode={playerJumpTimeMode} onJumpTimeModeChange={handlePlayerJumpTimeModeChange} onClose={() => setSettingsDialogVisible(false)} />
                     <CodecStreamingDialog
                       open={streamingConfirmFor !== null}
                       fileName={streamingConfirmFor?.video.fileName ?? ''}
@@ -890,6 +940,7 @@ export function App() {
       </div>
 
       {showStartScreen ? <AboutDialog appInfo={appInfo} open={aboutDialogVisible} onClose={() => setAboutDialogVisible(false)} /> : null}
+      {showStartScreen ? <SettingsDialog open={settingsDialogVisible} jumpTimeMode={playerJumpTimeMode} onJumpTimeModeChange={handlePlayerJumpTimeModeChange} onClose={() => setSettingsDialogVisible(false)} /> : null}
       <AddOnlineVideoDialog
         open={addOnlineVideoDialogOpen}
         existingPaths={new Set(videoLibrary.map((v) => v.path))}

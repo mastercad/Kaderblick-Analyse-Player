@@ -12,6 +12,7 @@ Desktop-Anwendung für die Fußball-Videoanalyse – CSV-basierte Szenennavigati
 |---|---|
 | **Segmentnavigation** | CSV-Datei laden, Szenen werden automatisch dem Video zugeordnet |
 | **Segmentmodus** | Nur markierte Szenen hintereinander abspielen |
+| **Timeline-Vorschau** | Beim Überfahren der Zeitleiste sofort das zugehörige Videobild und den Aufbaufortschritt anzeigen |
 | **Einzelwiederholung** | Aktive Szene in Schleife |
 | **Live-Filter** | Helligkeit, Kontrast, Sättigung, Weichzeichner – in Echtzeit während der Wiedergabe |
 | **Presets** | Filtereinstellungen speichern, laden, importieren und exportieren |
@@ -118,7 +119,7 @@ release/        # Build-Ausgabe (wird generiert)
 | Desktop-Framework | Electron 37 |
 | Frontend | React 19, TypeScript 5 |
 | Build | electron-vite, Vite 7 |
-| Medienverarbeitung | ffmpeg-static, ffprobe-static |
+| Medienverarbeitung | Native Chromium-Wiedergabe, WebCodecs/MP4Box für Timeline-Vorschaubilder, FFmpeg/FFprobe für Format-Fallbacks |
 | CSV-Parsing | PapaParse |
 | Tests | Vitest 3, @testing-library/react |
 | Release | semantic-release |

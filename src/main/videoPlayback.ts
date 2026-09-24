@@ -9,6 +9,8 @@ import ffprobeStatic from 'ffprobe-static'
 import type { VideoFileDescriptor, VideoPreparationProgress } from '../common/types'
 import { buildStreamUrl } from '../common/streaming'
 import { cacheVideoMetadata, getVideoMetadata } from './streamingProtocol'
+import { registerChildProcess } from './childProcessRegistry'
+import { getIndexedKeyframeTimes } from './timelinePreviewStorage'
 
 interface PlaybackProxyMetadata {
   playbackLabel?: string
@@ -130,9 +132,9 @@ const buildOptimizedPlaybackMetadata = (playbackHint?: string): PlaybackProxyMet
 
 const runProcess = (command: string, args: string[]): Promise<string> => {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const child = registerChildProcess(spawn(command, args, {
       windowsHide: true
-    })
+    }))
 
     let stdout = ''
     let stderr = ''
@@ -270,9 +272,9 @@ const transcodePlaybackProxy = async (
   onProgress?: (progress: VideoPreparationProgress) => void
 ): Promise<void> => {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(ffmpegExecutable(), buildFfmpegProxyArgs(sourcePath, outputPath, includeAudio), {
+    const child = registerChildProcess(spawn(ffmpegExecutable(), buildFfmpegProxyArgs(sourcePath, outputPath, includeAudio), {
       windowsHide: true
-    })
+    }))
 
     let stdoutBuffer = ''
     let stderr = ''
@@ -497,41 +499,53 @@ export const prepareStreamingPlayback = async (sourcePath: string): Promise<Vide
 
 // Cache of keyframe timestamps per file path (populated lazily on first request)
 const keyframeCache = new Map<string, number[]>()
+const keyframeRequests = new Map<string, Promise<number[]>>()
 
 export const getKeyframeTimes = (sourcePath: string): Promise<number[]> => {
   const cached = keyframeCache.get(sourcePath)
   if (cached) {
     return Promise.resolve(cached)
   }
+  const activeRequest = keyframeRequests.get(sourcePath)
+  if (activeRequest) return activeRequest
 
-  return new Promise((resolve) => {
-    const child = spawn(ffprobeExecutable(), [
-      '-v', 'quiet',
-      '-select_streams', 'v:0',
-      '-show_entries', 'packet=pts_time,flags',
-      '-print_format', 'csv',
-      sourcePath
-    ], { windowsHide: true })
+  const extension = path.extname(sourcePath).toLowerCase()
+  const sourceRequest = ['.mp4', '.mov', '.m4v'].includes(extension)
+    ? getIndexedKeyframeTimes(sourcePath)
+    : new Promise<number[]>((resolve) => {
+      const child = registerChildProcess(spawn(ffprobeExecutable(), [
+        '-v', 'quiet',
+        '-select_streams', 'v:0',
+        '-show_entries', 'packet=pts_time,flags',
+        '-print_format', 'csv',
+        sourcePath
+      ], { windowsHide: true }))
 
-    const chunks: Buffer[] = []
-    child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk))
-    child.stderr.on('data', () => { /* noop */ })
+      const chunks: Buffer[] = []
+      child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk))
+      child.stderr.on('data', () => { /* noop */ })
 
-    child.stdout.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8')
-      const times: number[] = []
-      for (const line of raw.split('\n')) {
-        // Format: packet,<pts_time>,<flags>  — only keep keyframe packets (flags contain 'K')
-        const parts = line.trim().split(',')
-        if (parts.length < 3 || !parts[2].includes('K')) continue
-        const t = parseFloat(parts[1])
-        if (Number.isFinite(t) && t >= 0) times.push(t)
-      }
-      times.sort((a, b) => a - b)
-      keyframeCache.set(sourcePath, times)
-      resolve(times)
+      child.stdout.on('end', () => {
+        const raw = Buffer.concat(chunks).toString('utf8')
+        const times: number[] = []
+        for (const line of raw.split('\n')) {
+          // Format: packet,<pts_time>,<flags>  — only keep keyframe packets (flags contain 'K')
+          const parts = line.trim().split(',')
+          if (parts.length < 3 || !parts[2].includes('K')) continue
+          const t = parseFloat(parts[1])
+          if (Number.isFinite(t) && t >= 0) times.push(t)
+        }
+        times.sort((a, b) => a - b)
+        resolve(times)
+      })
+
+      child.on('error', () => resolve([]))
     })
-
-    child.on('error', () => resolve([]))
+  const request = sourceRequest.then((times) => {
+    keyframeCache.set(sourcePath, times)
+    return times
   })
+  keyframeRequests.set(sourcePath, request)
+  void request.finally(() => keyframeRequests.delete(sourcePath))
+  return request
 }

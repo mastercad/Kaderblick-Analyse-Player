@@ -108,6 +108,7 @@ describe('VideoWorkspace – keyframe navigation buttons', () => {
     // Override the global desktopApi stub with one that returns real keyframe times
     Object.defineProperty(window, 'desktopApi', {
       value: {
+        ...window.desktopApi,
         getKeyframeTimes: (): Promise<number[]> => Promise.resolve([10, 20, 30, 40, 50])
       },
       writable: true,
@@ -118,7 +119,7 @@ describe('VideoWorkspace – keyframe navigation buttons', () => {
   afterEach(() => {
     // Restore no-op stub
     Object.defineProperty(window, 'desktopApi', {
-      value: { getKeyframeTimes: (): Promise<number[]> => Promise.resolve([]) },
+      value: { ...window.desktopApi, getKeyframeTimes: (): Promise<number[]> => Promise.resolve([]) },
       writable: true,
       configurable: true
     })
@@ -129,6 +130,7 @@ describe('VideoWorkspace – keyframe navigation buttons', () => {
     let resolveKeyframes!: (v: number[]) => void
     Object.defineProperty(window, 'desktopApi', {
       value: {
+        ...window.desktopApi,
         getKeyframeTimes: (): Promise<number[]> =>
           new Promise((res) => { resolveKeyframes = res })
       },

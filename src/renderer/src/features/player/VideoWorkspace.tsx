@@ -2,8 +2,8 @@ import { cloneElement, isValidElement, useEffect, useEffectEvent, useLayoutEffec
 import { buildCssFilter } from '../../../../common/filterUtils'
 import { findActiveSegmentIndex, parseTimeInput } from '../../../../common/segmentUtils'
 import { formatClockTime } from '../../../../common/timeUtils'
-import { matchTimeToVideoTime, videoTimeToMatchTime } from '../../../../common/matchTimeUtils'
-import type { FilterSettings, Segment, VideoFileDescriptor } from '../../../../common/types'
+import { getHalfStartSeconds, resolvePlayerJumpTarget, videoTimeToMatchTime } from '../../../../common/matchTimeUtils'
+import type { FilterSettings, PlayerJumpTimeMode, Segment, VideoFileDescriptor } from '../../../../common/types'
 import appLogo from '../../../../../assets/kaderblick_analyse_player_appicon.svg'
 import { SegmentList } from './SegmentList'
 import { SegmentTimeline } from './SegmentTimeline'
@@ -12,11 +12,14 @@ import { useVideoPlayback } from './useVideoPlayback'
 import { useOnlineVideoPlayback } from './useOnlineVideoPlayback'
 import { OnlineVideoPlayer } from './OnlineVideoPlayer'
 import { useZoom } from './useZoom'
+import { useTimelinePreview } from './useTimelinePreview'
 import { formatRate } from './playerUtils'
 import { MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL, PLAYBACK_RATES, SEEK_STEP_SECONDS, ZOOM_STEP } from './playerTypes'
 
 interface VideoWorkspaceProps {
   selectedVideo?: VideoFileDescriptor
+  matchVideos?: VideoFileDescriptor[]
+  jumpTimeMode?: PlayerJumpTimeMode
   segments: Segment[]
   filterSettings: FilterSettings
   filterOverlayVisible: boolean
@@ -43,6 +46,9 @@ interface VideoWorkspaceProps {
   onOpenSegmentEditor?: () => void
   isSegmentEditorOpen?: boolean
   onCurrentTimeChange?: (timeSeconds: number) => void
+  seekOnLoadSeconds?: number
+  onSeekOnLoadApplied?: () => void
+  onMatchVideoSeek?: (video: VideoFileDescriptor, videoSeconds: number) => void
   children: React.ReactNode
   overlayDialogs?: React.ReactNode
 }
@@ -67,6 +73,8 @@ function FlyoutPinIndicator() {
 
 export function VideoWorkspace({
   selectedVideo,
+  matchVideos = [],
+  jumpTimeMode = 'match-cumulative',
   segments,
   filterSettings,
   filterOverlayVisible,
@@ -93,6 +101,9 @@ export function VideoWorkspace({
   onOpenSegmentEditor,
   isSegmentEditorOpen,
   onCurrentTimeChange,
+  seekOnLoadSeconds,
+  onSeekOnLoadApplied,
+  onMatchVideoSeek,
   children,
   overlayDialogs
 }: VideoWorkspaceProps) {
@@ -120,6 +131,11 @@ export function VideoWorkspace({
   const zoom = useZoom({ videoStageViewportRef, videoRef, selectedVideo, isFullscreen, isInterstitialActiveRef })
 
   const isOnlineVideo = selectedVideo?.playbackMode === 'online'
+  const [loadedVideoPath, setLoadedVideoPath] = useState<string>()
+  const handleVideoLoaded = (durationSeconds: number): void => {
+    setLoadedVideoPath(selectedVideo?.path)
+    onVideoLoaded?.(durationSeconds)
+  }
 
   const localPlayback = useVideoPlayback({
     videoRef,
@@ -133,7 +149,7 @@ export function VideoWorkspace({
     playbackRecoveryInProgress,
     setVideoIntrinsicSize: zoom.setVideoIntrinsicSize,
     onCurrentTimeChange,
-    onVideoLoaded,
+    onVideoLoaded: handleVideoLoaded,
     onVideoError,
     onAllSegmentsDone,
     onFirstSegmentReached,
@@ -151,7 +167,7 @@ export function VideoWorkspace({
     autoStartSegmentsOnLoad,
     autoStartSegmentsFromEnd,
     onCurrentTimeChange,
-    onVideoLoaded,
+    onVideoLoaded: handleVideoLoaded,
     onVideoError,
     onAllSegmentsDone,
     onFirstSegmentReached,
@@ -160,6 +176,25 @@ export function VideoWorkspace({
   })
 
   const playback = isOnlineVideo ? onlinePlayback : localPlayback
+  const timelinePreviewVideos = selectedVideo && !matchVideos.some((video) => video.path === selectedVideo.path)
+    ? [...matchVideos, selectedVideo]
+    : matchVideos
+  const timelinePreview = useTimelinePreview(timelinePreviewVideos, selectedVideo?.path, playback.isPlaying)
+  const appliedSeekOnLoadRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (
+      !selectedVideo ||
+      loadedVideoPath !== selectedVideo.path ||
+      seekOnLoadSeconds === undefined ||
+      playback.duration <= 0
+    ) return
+    const seekKey = `${selectedVideo.path}:${seekOnLoadSeconds}`
+    if (appliedSeekOnLoadRef.current === seekKey) return
+    appliedSeekOnLoadRef.current = seekKey
+    playback.seekTo(seekOnLoadSeconds)
+    onSeekOnLoadApplied?.()
+  }, [selectedVideo?.path, loadedVideoPath, seekOnLoadSeconds, playback.duration, onSeekOnLoadApplied])
 
   // useLayoutEffect: runs synchronously after every commit, before any browser events.
   // This guarantees isPlayingRef in App.tsx is always up-to-date before the next user interaction.
@@ -240,7 +275,8 @@ export function VideoWorkspace({
       return
     }
     playback.seekTo(selectedVideo.kickoffVideoSeconds)
-    showKeyboardHud('A', 'Anstoß', selectedVideo.matchHalf === 2 ? 'Spielzeit 45:00' : 'Spielzeit 00:00')
+    const halfStartSeconds = getHalfStartSeconds(selectedVideo.matchHalf, selectedVideo.matchDurationSeconds)
+    showKeyboardHud('A', 'Anstoß', `Spielzeit ${formatClockTime(halfStartSeconds)}`)
   }
 
   // Global keyboard shortcuts
@@ -409,8 +445,43 @@ export function VideoWorkspace({
 
   const hasMatchClock = selectedVideo?.matchHalf !== undefined && selectedVideo.kickoffVideoSeconds !== undefined
   const currentMatchTime = hasMatchClock
-    ? videoTimeToMatchTime(playback.currentTime, selectedVideo.kickoffVideoSeconds!, selectedVideo.matchHalf!)
+    ? videoTimeToMatchTime(
+        playback.currentTime,
+        selectedVideo.kickoffVideoSeconds!,
+        selectedVideo.matchHalf!,
+        selectedVideo.matchDurationSeconds
+      )
     : null
+  const isMatchJumpMode = jumpTimeMode === 'match-per-part' || jumpTimeMode === 'match-cumulative'
+  const canUseTimeJump = Boolean(selectedVideo) && (!isMatchJumpMode || hasMatchClock)
+  const jumpTimeModeLabel: Record<PlayerJumpTimeMode, string> = {
+    'video-per-file': 'Videozeit je Video',
+    'video-cumulative': 'Videozeit fortlaufend',
+    'match-per-part': 'Spielzeit je Teil',
+    'match-cumulative': 'Spielzeit fortlaufend'
+  }
+  const currentJumpTime = (() => {
+    if (!selectedVideo) return null
+    if (jumpTimeMode === 'video-per-file') return playback.currentTime
+    if (jumpTimeMode === 'match-per-part') {
+      return selectedVideo.kickoffVideoSeconds === undefined
+        ? null
+        : playback.currentTime - selectedVideo.kickoffVideoSeconds
+    }
+    if (jumpTimeMode === 'match-cumulative') return currentMatchTime
+
+    const groupId = selectedVideo.matchGroupId?.trim().toLocaleLowerCase()
+    const groupedVideos = groupId
+      ? matchVideos.filter((video) => video.matchGroupId?.trim().toLocaleLowerCase() === groupId)
+      : [selectedVideo]
+    let cumulativeSeconds = 0
+    for (const video of groupedVideos) {
+      if (video.path === selectedVideo.path) return cumulativeSeconds + playback.currentTime
+      if ((video.durationSeconds ?? 0) <= 0) return playback.currentTime
+      cumulativeSeconds += video.durationSeconds!
+    }
+    return playback.currentTime
+  })()
   const orientationSegmentIndex = playback.activeSegmentIndex >= 0
     ? playback.activeSegmentIndex
     : findActiveSegmentIndex(segments, playback.currentTime)
@@ -423,13 +494,27 @@ export function VideoWorkspace({
     : segments.length
   const handleMatchTimeSeek = (event: React.FormEvent): void => {
     event.preventDefault()
-    if (!selectedVideo || !hasMatchClock) return
+    if (!selectedVideo || !canUseTimeJump) return
     const matchSeconds = parseTimeInput(matchTimeInput)
     if (matchSeconds === null) {
       setMatchTimeError('Bitte eine Spielzeit wie 45:12 eingeben.')
       return
     }
-    const videoSeconds = matchTimeToVideoTime(matchSeconds, selectedVideo.kickoffVideoSeconds!, selectedVideo.matchHalf!)
+    const crossVideoTarget = resolvePlayerJumpTarget(jumpTimeMode, matchVideos, selectedVideo, matchSeconds)
+    if (!crossVideoTarget) {
+      setMatchTimeError('Für diese Zeit wurde kein passendes Video gefunden.')
+      return
+    }
+    if (crossVideoTarget && crossVideoTarget.video.path !== selectedVideo.path) {
+      if (!onMatchVideoSeek) {
+        setMatchTimeError('Das passende Teilvideo kann nicht geöffnet werden.')
+        return
+      }
+      setMatchTimeError(null)
+      onMatchVideoSeek(crossVideoTarget.video, crossVideoTarget.videoSeconds)
+      return
+    }
+    const videoSeconds = crossVideoTarget.videoSeconds
     if (videoSeconds < 0 || (playback.duration > 0 && videoSeconds > playback.duration)) {
       setMatchTimeError('Diese Spielzeit liegt außerhalb des Videos.')
       return
@@ -682,11 +767,11 @@ export function VideoWorkspace({
       ) : null}
         <span className="time-row__total">{formatClockTime(playback.duration)}</span>
       </div>
-      {hasMatchClock && (
+      {canUseTimeJump && (
         <form className="match-time-jump" onSubmit={handleMatchTimeSeek}>
-          <span className="match-time-jump__current">Spielzeit: {currentMatchTime !== null && currentMatchTime >= 0 ? formatClockTime(currentMatchTime) : 'vor Anstoß'}</span>
-          <label htmlFor="match-time-input">Springe zu Spielzeit</label>
-          <input id="match-time-input" value={matchTimeInput} onChange={(event) => setMatchTimeInput(event.target.value)} placeholder={selectedVideo?.matchHalf === 2 ? 'z. B. 45:12' : 'z. B. 09:00'} />
+          <span className="match-time-jump__current">{isMatchJumpMode ? 'Spielzeit' : 'Videozeit'}: {currentJumpTime !== null && currentJumpTime >= 0 ? formatClockTime(currentJumpTime) : 'vor Beginn'}</span>
+          <label htmlFor="match-time-input">Springe zu Zeit <small>({jumpTimeModeLabel[jumpTimeMode]})</small></label>
+          <input id="match-time-input" value={matchTimeInput} onChange={(event) => setMatchTimeInput(event.target.value)} placeholder={jumpTimeMode === 'match-cumulative' && selectedVideo?.matchHalf === 2 ? `z. B. ${formatClockTime(getHalfStartSeconds(2, selectedVideo.matchDurationSeconds) + 12)}` : 'z. B. 09:00'} />
           <button className="button button--subtle" type="submit" title="Zur eingegebenen Spielzeit springen (Enter)">Springen</button>
           {matchTimeError && <span className="match-time-jump__error" role="alert">{matchTimeError}</span>}
         </form>
@@ -782,6 +867,9 @@ export function VideoWorkspace({
       onSeek={handleTimelineSeek}
       onScrubStart={playback.startScrub}
       onScrub={playback.scrubTo}
+      previewFrame={timelinePreview.frame}
+      previewStatus={timelinePreview.status}
+      onPreviewTimeChange={timelinePreview.requestPreview}
     />
   )
 

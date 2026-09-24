@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { formatClockTime } from '../../../../common/timeUtils'
-import type { Segment } from '../../../../common/types'
+import type { Segment, TimelinePreviewFrame } from '../../../../common/types'
+import type { TimelinePreviewStatus } from './useTimelinePreview'
 
 interface SegmentTimelineProps {
   duration: number
@@ -12,9 +13,12 @@ interface SegmentTimelineProps {
   onScrubStart?: () => void
   /** Called on every pointer move (rAF-throttled by the consumer) for live frame updates. */
   onScrub?: (nextTimeSeconds: number) => void
+  previewFrame?: TimelinePreviewFrame | null
+  previewStatus?: TimelinePreviewStatus
+  onPreviewTimeChange?: (seconds: number | null) => void
 }
 
-export function SegmentTimeline({ duration, currentTime, activeSegmentIndex, segments, onSeek, onScrubStart, onScrub }: SegmentTimelineProps) {
+export function SegmentTimeline({ duration, currentTime, activeSegmentIndex, segments, onSeek, onScrubStart, onScrub, previewFrame, previewStatus, onPreviewTimeChange }: SegmentTimelineProps) {
   const [hoverRatio, setHoverRatio] = useState<number | null>(null)
   const [dragRatio, setDragRatio] = useState<number | null>(null)
   const isDraggingRef = useRef(false)
@@ -33,7 +37,9 @@ export function SegmentTimeline({ duration, currentTime, activeSegmentIndex, seg
     event.currentTarget.setPointerCapture(event.pointerId)
     isDraggingRef.current = true
     hasDraggedRef.current = false
-    setDragRatio(getRatio(event.clientX, event.currentTarget))
+    const ratio = getRatio(event.clientX, event.currentTarget)
+    setDragRatio(ratio)
+    onPreviewTimeChange?.(duration * ratio)
   }
 
   const handlePointerMove = (event: React.PointerEvent<HTMLButtonElement>): void => {
@@ -45,6 +51,7 @@ export function SegmentTimeline({ duration, currentTime, activeSegmentIndex, seg
     hasDraggedRef.current = true
     const ratio = getRatio(event.clientX, event.currentTarget)
     setDragRatio(ratio)
+    onPreviewTimeChange?.(duration * ratio)
     onScrub?.(duration * ratio)
   }
 
@@ -71,11 +78,16 @@ export function SegmentTimeline({ duration, currentTime, activeSegmentIndex, seg
   const handleMouseMove = (event: React.MouseEvent<HTMLButtonElement>): void => {
     if (duration <= 0 || isDraggingRef.current) return
     const bounds = event.currentTarget.getBoundingClientRect()
-    setHoverRatio(Math.min(Math.max((event.clientX - bounds.left) / bounds.width, 0), 1))
+    const ratio = Math.min(Math.max((event.clientX - bounds.left) / bounds.width, 0), 1)
+    setHoverRatio(ratio)
+    onPreviewTimeChange?.(duration * ratio)
   }
 
   const handleMouseLeave = (): void => {
-    if (!isDraggingRef.current) setHoverRatio(null)
+    if (!isDraggingRef.current) {
+      setHoverRatio(null)
+      onPreviewTimeChange?.(null)
+    }
   }
 
   // During drag: needle and progress bar follow the drag position for immediate feedback.
@@ -97,6 +109,14 @@ export function SegmentTimeline({ duration, currentTime, activeSegmentIndex, seg
       aria-label="Zeitleiste"
     >
       <span className="timeline__track" />
+      {previewStatus && previewStatus.phase !== 'idle' && previewStatus.phase !== 'unavailable' ? (
+        <span
+          className={`timeline__preview-progress timeline__preview-progress--${previewStatus.phase}`}
+          data-testid="timeline-preview-progress"
+          style={{ width: `${previewStatus.percent}%` }}
+          title={`${previewStatus.message} (${Math.round(previewStatus.percent)} %)`}
+        />
+      ) : null}
       <span className="timeline__progress" style={{ width: `${progressPercent}%` }} />
 
       {segments.map((segment, index) => {
@@ -124,11 +144,25 @@ export function SegmentTimeline({ duration, currentTime, activeSegmentIndex, seg
             aria-hidden="true"
           />
           <span
-            className="timeline__tooltip"
-            style={{ left: `${indicatorRatio * 100}%` }}
+            className={`timeline__tooltip${previewFrame || (previewStatus && previewStatus.phase !== 'idle' && previewStatus.phase !== 'ready') ? ' timeline__tooltip--preview' : ''}`}
+            style={{ left: `clamp(88px, ${indicatorRatio * 100}%, calc(100% - 88px))` }}
             aria-hidden="true"
           >
-            {formatClockTime(duration * indicatorRatio)}
+            {previewFrame ? (
+              <span
+                className="timeline__preview-image"
+                style={{
+                  backgroundImage: `url(${previewFrame.imageUrl})`,
+                  backgroundSize: `${previewFrame.columns * 100}% ${previewFrame.rows * 100}%`,
+                  backgroundPosition: `${previewFrame.columns === 1 ? 0 : previewFrame.column / (previewFrame.columns - 1) * 100}% ${previewFrame.rows === 1 ? 0 : previewFrame.row / (previewFrame.rows - 1) * 100}%`
+                }}
+              />
+            ) : null}
+            {!previewFrame && previewStatus?.phase === 'indexing' ? <span className="timeline__preview-loading">Videoindex wird gelesen…</span> : null}
+            {!previewFrame && (previewStatus?.phase === 'coarse' || previewStatus?.phase === 'fine') ? <span className="timeline__preview-loading">{previewStatus.message}: {Math.round(previewStatus.percent)} %</span> : null}
+            {!previewFrame && previewStatus?.phase === 'paused' ? <span className="timeline__preview-loading">Vorschau pausiert während der Wiedergabe</span> : null}
+            {!previewFrame && previewStatus?.phase === 'unavailable' ? <span className="timeline__preview-loading">Vorschau nicht verfügbar</span> : null}
+            <span className="timeline__preview-time">{formatClockTime(duration * indicatorRatio)}</span>
           </span>
         </>
       ) : null}

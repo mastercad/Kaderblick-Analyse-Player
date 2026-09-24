@@ -31,6 +31,18 @@ Dort könnt ihr:
 - Ein einzelnes Segment in Wiederholung laufen lassen
 - Segmentmarken direkt in der Zeitleiste sehen
 
+## Vorschau in der Zeitleiste
+
+Wenn ihr mit der Maus über die Zeitleiste fahrt, erscheint direkt das Videobild an der jeweiligen Position. Ein schmaler Fortschrittsbalken in der Zeitleiste zeigt, wie weit die Vorschau für das aktuelle Video vorbereitet ist.
+
+Nach dem Laden erstellt die App zuerst eine schnelle Übersicht über das gesamte Video. Anschließend werden die Abstände im Hintergrund bis auf eine Sekunde verfeinert. Weitere geladene Halbzeiten oder Teile desselben Spiels werden danach automatisch vorbereitet.
+
+Während das Hauptvideo läuft, pausiert die Hintergrundaufbereitung vollständig, damit die Wiedergabe Vorrang vor der Vorschau hat. Bereits vorbereitete Bilder bleiben trotzdem sofort verfügbar. Beim Pausieren des Videos wird die Aufbereitung fortgesetzt.
+
+Die Vorschaubilder bleiben nach dem Schließen der App erhalten. Der Cache ist auf 512 MB begrenzt; Einträge, die 30 Tage lang nicht verwendet wurden, werden automatisch entfernt. Wird eine Quelldatei verändert, verwendet die App deren alte Vorschaubilder nicht mehr.
+
+Für MP4-, MOV- und M4V-Dateien mit H.264 liest die App gezielt nur den Dateiindex und die benötigten Schlüsselbilder. Dafür wird kein separater FFmpeg-Prozess gestartet. Bei anderen direkt abspielbaren Formaten versucht die App die Vorschau über den eingebauten Videodecoder zu erzeugen. Falls ein Format auch damit nicht gelesen werden kann, zeigt die Zeitleiste `Vorschau nicht verfügbar`; die normale Wiedergabe bleibt davon unabhängig.
+
 ## Filter benutzen
 
 Über dem Video gibt es einen Filterbereich. Dort konnt ihr das Bild während der Wiedergabe direkt anpassen.
@@ -89,6 +101,17 @@ Das ist hilfreich, wenn ihr einen Analysezustand dokumentieren oder später wied
 ## Segmentübergänge einstellen
 
 Im Menü oben rechts könnt ihr unter `Übergangsscreen` die Dauer zwischen zwei Segmenten festlegen. Mit `0s` werden Segmentübergänge vollständig deaktiviert; die Wiedergabe springt dann ohne Übergangsscreen direkt zum nächsten Segment.
+
+## Zeitformat für spontane Sprünge
+
+Unter `Einstellungen` im Menü oben rechts legt ihr fest, wie eine im Player eingegebene Sprungzeit verstanden wird:
+
+- `Videozeit – je Video`: direkte Position im aktuell geöffneten Video
+- `Videozeit – fortlaufend`: Laufzeiten vorheriger Videos desselben Spiels sind eingerechnet
+- `Spielzeit – je Halbzeit/Teil`: die Zeit beginnt je Halbzeit oder Teil wieder bei null
+- `Spielzeit – fortlaufend`: die Spieluhr läuft über alle Halbzeiten oder Teile weiter
+
+Der gewählte Modus betrifft ausschließlich das Sprungfeld im Player. CSV- und Segmentzeiten bleiben immer direkte Positionen im jeweiligen Video.
 
 ## Über die App
 
