@@ -1,3 +1,10 @@
+# [2.7.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.6.0...v2.7.0) (2026-10-05)
+
+
+### Features
+
+* **player:** enhance video analysis controls ([1c47ff7](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/1c47ff79b5d92ef723b86ba69cfe603bb22884f9))
+
 # [2.6.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.5.3...v2.6.0) (2026-09-24)
 
 
