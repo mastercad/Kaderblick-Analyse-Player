@@ -514,6 +514,9 @@ describe('VideoWorkspace', () => {
     expect(orientation).toHaveTextContent('Video05:30 / 10:00noch 04:30')
     expect(orientation).toHaveTextContent('Segment 1/1noch 00:30')
 
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Wiedergabe und Timeline einblenden' }))
+    expect(screen.getByTestId('fullscreen-orientation')).toHaveClass('fullscreen-orientation--controls-open')
+
     fireEvent.keyDown(window, { code: 'KeyT', key: 't' })
     expect(screen.queryByTestId('fullscreen-orientation')).not.toBeInTheDocument()
     expect(window.localStorage.getItem('kaderblick-fullscreen-orientation-visible')).toBe('false')
@@ -609,6 +612,9 @@ describe('VideoWorkspace', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Zoom-Steuerung einblenden' }))
     })
 
+    const zoomSlider = screen.getByRole('slider', { name: 'Zoomstufe' })
+    expect(zoomSlider).toHaveAttribute('max', '10')
+
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: 'Zoom vergroessern' }))
     })
@@ -625,11 +631,143 @@ describe('VideoWorkspace', () => {
     expect(canvas.style.transform).toBe('translate(-100px, -50px)')
     expect(content.style.transform).toBe('scale(1.5)')
 
+    fireEvent.change(zoomSlider, { target: { value: '10' } })
+
+    expect(screen.getByText(/10\.00\s*x/)).toBeInTheDocument()
+    expect(content.style.transform).toBe('scale(10)')
+
     fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
 
     expect(screen.getByText(/1\.00\s*x/)).toBeInTheDocument()
     expect(canvas.style.transform).toBe('translate(0px, 0px)')
     expect(content.style.transform).toBe('scale(1)')
+  })
+
+  it('keeps a zoomed video visible when returning from fullscreen', () => {
+    let fullscreenElement: Element | null = null
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      get: () => fullscreenElement
+    })
+
+    render(
+      <VideoWorkspace
+        selectedVideo={selectedVideo}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const viewport = screen.getByTestId('video-zoom-viewport')
+    const canvas = screen.getByTestId('video-zoom-canvas')
+    const content = screen.getByTestId('video-zoom-content')
+    const playerPanel = viewport.closest('section') as HTMLElement
+    vi.spyOn(viewport, 'getBoundingClientRect').mockImplementation(() => {
+      const width = fullscreenElement ? 1920 : 640
+      const height = fullscreenElement ? 1080 : 360
+      return {
+        x: 0, y: 0, left: 0, top: 0, right: width, bottom: height, width, height,
+        toJSON: () => ({})
+      } as DOMRect
+    })
+
+    const video = document.querySelector('video')!
+    Object.defineProperty(video, 'duration', { configurable: true, value: 600 })
+    Object.defineProperty(video, 'videoWidth', { configurable: true, value: 1920 })
+    Object.defineProperty(video, 'videoHeight', { configurable: true, value: 1080 })
+    fireEvent.loadedMetadata(video)
+    act(() => { fireEvent(window, new Event('resize')) })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom-Steuerung einblenden' }))
+    fireEvent.change(screen.getByRole('slider', { name: 'Zoomstufe' }), { target: { value: '10' } })
+    expect(canvas.style.transform).toBe('translate(-2880px, -1620px)')
+
+    fullscreenElement = playerPanel
+    act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    act(() => { fireEvent(window, new Event('resize')) })
+    expect(canvas.style.transform).toBe('translate(-8640px, -4860px)')
+
+    fullscreenElement = null
+    act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    act(() => { fireEvent(window, new Event('resize')) })
+
+    expect(canvas.style.width).toBe('640px')
+    expect(canvas.style.height).toBe('360px')
+    expect(canvas.style.transform).toBe('translate(-2880px, -1620px)')
+    expect(content.style.transform).toBe('scale(10)')
+  })
+
+  it('saves the visible video view as a screenshot when S is pressed', async () => {
+    const captureScreenshot = vi.spyOn(window.desktopApi, 'captureScreenshot').mockResolvedValue({
+      filePath: '/tmp/Kaderblick Screenshots/test-video.png'
+    })
+    const drawImage = vi.fn()
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      setTransform: vi.fn(),
+      fillRect: vi.fn(),
+      drawImage,
+      fillStyle: '',
+      filter: 'none'
+    } as unknown as CanvasRenderingContext2D)
+    const toBlob = vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => {
+      callback(new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' }))
+    })
+
+    render(
+      <VideoWorkspace
+        selectedVideo={selectedVideo}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const viewport = screen.getByTestId('video-zoom-viewport')
+    vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+      x: 12,
+      y: 24,
+      left: 12,
+      top: 24,
+      right: 652,
+      bottom: 384,
+      width: 640,
+      height: 360,
+      toJSON: () => ({})
+    } as DOMRect)
+    const video = document.querySelector('video')!
+    Object.defineProperty(video, 'duration', { configurable: true, value: 600 })
+    Object.defineProperty(video, 'videoWidth', { configurable: true, value: 1280 })
+    Object.defineProperty(video, 'videoHeight', { configurable: true, value: 720 })
+    video.currentTime = 65
+    fireEvent.loadedMetadata(video)
+    fireEvent.timeUpdate(video)
+    act(() => { fireEvent(window, new Event('resize')) })
+
+    await act(async () => {
+      fireEvent.keyDown(window, { code: 'KeyS', key: 's' })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(captureScreenshot).toHaveBeenCalledOnce()
+    const [imageBytes, suggestedName] = captureScreenshot.mock.calls[0]
+    expect(imageBytes).toBeInstanceOf(Uint8Array)
+    expect(suggestedName).toBe('test-video_01-05')
+    expect(drawImage).toHaveBeenCalledWith(video, 0, 0, 640, 360)
+    expect(screen.getByRole('status')).toHaveTextContent('Screenshot gespeichert: test-video.png')
+    captureScreenshot.mockRestore()
+    getContext.mockRestore()
+    toBlob.mockRestore()
   })
 
   it('documents the available keyboard controls in button tooltips and shortcut help', () => {
@@ -664,5 +802,6 @@ describe('VideoWorkspace', () => {
     fireEvent.click(screen.getByText('Tastenkürzel'))
     expect(screen.getByText('Segmentanfang; zweimal: voriges Segment')).toBeInTheDocument()
     expect(screen.getByText('Nur Segmente abspielen ein-/ausschalten')).toBeInTheDocument()
+    expect(screen.getByText('Screenshot speichern')).toBeInTheDocument()
   })
 })

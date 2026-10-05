@@ -5,7 +5,7 @@ import { app, BrowserWindow, ipcMain, protocol, session } from 'electron'
 import { defaultAppInfo } from '../common/appInfo'
 import { KVIDEO_SCHEME } from '../common/streaming'
 import type { AppSettingsExport, FilterPreset } from '../common/types'
-import { exportAppSettingsToJson, importAppSettingsFromJson, exportPresetsToJson, importPresetsFromJson, pickCsvFile, pickVideoFile, pickVideoFiles, preparePlaybackFallbackForPath, saveCsvFile } from './dialogs'
+import { captureAndSaveScreenshot, exportAppSettingsToJson, importAppSettingsFromJson, exportPresetsToJson, importPresetsFromJson, pickCsvFile, pickVideoFile, pickVideoFiles, preparePlaybackFallbackForPath, saveCsvFile } from './dialogs'
 import { readStoredPresets, writeStoredPresets } from './presetStorage'
 import { initStreamingProtocol, registerStreamingProtocol } from './streamingProtocol'
 import { ffmpegExecutable, getKeyframeTimes, prepareStreamingPlayback } from './videoPlayback'
@@ -107,6 +107,9 @@ app.whenReady().then(() => {
   ipcMain.handle('preview:storeSheet', (_, sourcePath: string, sheet) => storeTimelinePreviewSheet(sourcePath, sheet))
   ipcMain.handle('preview:markComplete', (_, sourcePath: string, phase) => markTimelinePreviewPhaseComplete(sourcePath, phase))
   ipcMain.handle('preview:getFrame', (_, sourcePath: string, seconds: number) => getTimelinePreviewFrame(sourcePath, seconds))
+  ipcMain.handle('screenshot:save', (_, imageBytes: Uint8Array, suggestedBaseName: string) => (
+    captureAndSaveScreenshot(imageBytes, suggestedBaseName)
+  ))
   ipcMain.handle('dialog:pickCsvFile', () => pickCsvFile())
   ipcMain.handle('dialog:saveCsvFile', (_, content: string) => saveCsvFile(content))
   ipcMain.handle('presets:load', () => readStoredPresets())

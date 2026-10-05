@@ -29,6 +29,7 @@ Desktop-Anwendung für die Fußball-Videoanalyse – CSV-basierte Szenennavigati
 | `N` | Segmentmodus ein-/ausschalten |
 | `R` | Einzelwiederholung ein-/ausschalten |
 | `F` | Filterbereich ein-/ausblenden |
+| `S` | Screenshot eines lokalen Videos im Bilderordner unter `Kaderblick Screenshots` speichern |
 | `Pfeil links` | Voriges Segment |
 | `Pfeil rechts` | Nächstes Segment |
 | `F11` | Vollbild |

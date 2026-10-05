@@ -28,7 +28,8 @@ Object.defineProperty(window, 'desktopApi', {
     getTimelinePreviewCacheState: (): Promise<{ coarseComplete: boolean; fineComplete: boolean; cachedTargets: number[] }> => Promise.resolve({ coarseComplete: false, fineComplete: true, cachedTargets: [] }),
     storeTimelinePreviewSheet: (): Promise<void> => Promise.resolve(),
     markTimelinePreviewPhaseComplete: (): Promise<void> => Promise.resolve(),
-    getTimelinePreviewFrame: (): Promise<null> => Promise.resolve(null)
+    getTimelinePreviewFrame: (): Promise<null> => Promise.resolve(null),
+    captureScreenshot: (): Promise<{ filePath: string }> => Promise.resolve({ filePath: '/tmp/kaderblick-screenshot.png' })
   },
   writable: true,
   configurable: true

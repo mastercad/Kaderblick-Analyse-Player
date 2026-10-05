@@ -105,6 +105,10 @@ export interface TimelinePreviewSheet {
   imageBytes: Uint8Array
 }
 
+export interface ScreenshotSaveResult {
+  filePath: string
+}
+
 export interface CsvFileDescriptor {
   path: string
   fileName: string

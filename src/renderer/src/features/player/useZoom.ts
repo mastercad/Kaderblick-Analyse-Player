@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import type { VideoFileDescriptor } from '../../../../common/types'
 import { MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL, ZOOM_STEP } from './playerTypes'
@@ -32,6 +32,7 @@ export function useZoom({ videoStageViewportRef, videoRef, selectedVideo, isFull
     startClientY: number
     startOffset: Point
   } | null>(null)
+  const previousLayoutRef = useRef<{ viewport: Size; fittedRect: VideoRect; zoomLevel: number } | null>(null)
 
   const fittedVideoRect = getFittedVideoRect(viewportSize, videoIntrinsicSize)
   const isZoomed = zoomLevel > MIN_ZOOM_LEVEL
@@ -58,6 +59,11 @@ export function useZoom({ videoStageViewportRef, videoRef, selectedVideo, isFull
     }
 
     measureViewport()
+    let firstLayoutFrame = requestAnimationFrame(() => {
+      firstLayoutFrame = 0
+      secondLayoutFrame = requestAnimationFrame(measureViewport)
+    })
+    let secondLayoutFrame = 0
 
     let resizeObserver: ResizeObserver | undefined
     if (typeof ResizeObserver !== 'undefined') {
@@ -67,10 +73,63 @@ export function useZoom({ videoStageViewportRef, videoRef, selectedVideo, isFull
 
     window.addEventListener('resize', measureViewport)
     return () => {
+      if (firstLayoutFrame) cancelAnimationFrame(firstLayoutFrame)
+      if (secondLayoutFrame) cancelAnimationFrame(secondLayoutFrame)
       resizeObserver?.disconnect()
       window.removeEventListener('resize', measureViewport)
     }
   }, [selectedVideo?.fileUrl, isFullscreen])
+
+  useLayoutEffect(() => {
+    const nextLayout = { viewport: viewportSize, fittedRect: fittedVideoRect, zoomLevel }
+    const previousLayout = previousLayoutRef.current
+    previousLayoutRef.current = nextLayout
+
+    if (fittedVideoRect.width <= 0 || fittedVideoRect.height <= 0) return
+    if (zoomLevel <= MIN_ZOOM_LEVEL) {
+      setZoomOffset({ x: 0, y: 0 })
+      return
+    }
+
+    const viewportChanged = previousLayout && (
+      previousLayout.viewport.width !== viewportSize.width ||
+      previousLayout.viewport.height !== viewportSize.height ||
+      previousLayout.fittedRect.width !== fittedVideoRect.width ||
+      previousLayout.fittedRect.height !== fittedVideoRect.height
+    )
+
+    setZoomOffset((currentOffset) => {
+      if (!viewportChanged || previousLayout.fittedRect.width <= 0 || previousLayout.fittedRect.height <= 0) {
+        return ensureFinitePoint(clampZoomOffset(currentOffset, zoomLevel, viewportSize, fittedVideoRect))
+      }
+
+      const focalPoint = {
+        x: (
+          previousLayout.viewport.width / 2 -
+          previousLayout.fittedRect.left -
+          currentOffset.x
+        ) / (previousLayout.fittedRect.width * previousLayout.zoomLevel),
+        y: (
+          previousLayout.viewport.height / 2 -
+          previousLayout.fittedRect.top -
+          currentOffset.y
+        ) / (previousLayout.fittedRect.height * previousLayout.zoomLevel)
+      }
+      const remappedOffset = {
+        x: viewportSize.width / 2 - fittedVideoRect.left - focalPoint.x * fittedVideoRect.width * zoomLevel,
+        y: viewportSize.height / 2 - fittedVideoRect.top - focalPoint.y * fittedVideoRect.height * zoomLevel
+      }
+      return ensureFinitePoint(clampZoomOffset(remappedOffset, zoomLevel, viewportSize, fittedVideoRect))
+    })
+  }, [
+    viewportSize.width,
+    viewportSize.height,
+    fittedVideoRect.left,
+    fittedVideoRect.top,
+    fittedVideoRect.width,
+    fittedVideoRect.height,
+    zoomLevel
+  ])
 
   // --- internal helpers ---
 

@@ -60,6 +60,11 @@ interface KeyboardHudMessage {
   value?: string
 }
 
+interface ScreenshotStatus {
+  kind: 'saving' | 'saved' | 'error'
+  message: string
+}
+
 const fullscreenOrientationStorageKey = 'kaderblick-fullscreen-orientation-visible'
 const segmentSidebarCollapsedStorageKey = 'kaderblick-segment-sidebar-collapsed'
 
@@ -114,6 +119,11 @@ export function VideoWorkspace({
   const isInterstitialActiveRef = useRef(false)
   const titleRef = useRef<HTMLDivElement | null>(null)
   const titleInternalRef = useRef(sessionTitle ?? '')
+  const fullscreenBottomFlyoutRef = useRef<HTMLDivElement | null>(null)
+  const [fullscreenBottomFlyoutHeight, setFullscreenBottomFlyoutHeight] = useState(0)
+  const [screenshotStatus, setScreenshotStatus] = useState<ScreenshotStatus | null>(null)
+  const screenshotStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const screenshotCaptureInProgressRef = useRef(false)
 
   // Initialize contentEditable with the persisted title on mount
   useEffect(() => {
@@ -232,6 +242,7 @@ export function VideoWorkspace({
 
   useEffect(() => () => {
     if (keyboardHudTimerRef.current !== null) clearTimeout(keyboardHudTimerRef.current)
+    if (screenshotStatusTimerRef.current !== null) clearTimeout(screenshotStatusTimerRef.current)
   }, [])
 
   useEffect(() => {
@@ -245,6 +256,30 @@ export function VideoWorkspace({
   useEffect(() => {
     window.localStorage.setItem(segmentSidebarCollapsedStorageKey, String(segmentSidebarCollapsed))
   }, [segmentSidebarCollapsed])
+
+  useLayoutEffect(() => {
+    if (!isFullscreen || !fullscreenBottomFlyoutRef.current) {
+      setFullscreenBottomFlyoutHeight(0)
+      return
+    }
+
+    const panel = fullscreenBottomFlyoutRef.current
+    const measurePanel = (): void => {
+      setFullscreenBottomFlyoutHeight(Math.ceil(panel.getBoundingClientRect().height))
+    }
+
+    measurePanel()
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? undefined
+      : new ResizeObserver(measurePanel)
+    resizeObserver?.observe(panel)
+    window.addEventListener('resize', measurePanel)
+
+    return () => {
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize', measurePanel)
+    }
+  }, [isFullscreen])
 
   // A closed flyout must not retain focus. Otherwise Space can activate or scroll
   // controls that have already been moved outside the fullscreen viewport.
@@ -279,6 +314,91 @@ export function VideoWorkspace({
     showKeyboardHud('A', 'Anstoß', `Spielzeit ${formatClockTime(halfStartSeconds)}`)
   }
 
+  const showScreenshotStatus = (status: ScreenshotStatus, duration = 3000): void => {
+    if (screenshotStatusTimerRef.current !== null) clearTimeout(screenshotStatusTimerRef.current)
+    setScreenshotStatus(status)
+    screenshotStatusTimerRef.current = setTimeout(() => {
+      setScreenshotStatus(null)
+      screenshotStatusTimerRef.current = null
+    }, duration)
+  }
+
+  const captureCurrentView = useEffectEvent(async (): Promise<void> => {
+    if (!selectedVideo || !videoStageViewportRef.current || screenshotCaptureInProgressRef.current) return
+
+    const captureScreenshot = window.desktopApi.captureScreenshot
+    if (typeof captureScreenshot !== 'function') {
+      showScreenshotStatus({
+        kind: 'error',
+        message: 'Screenshot-Funktion noch nicht geladen. Bitte die App vollständig neu starten.'
+      }, 5000)
+      return
+    }
+
+    if (selectedVideo.playbackMode === 'online' || !videoRef.current) {
+      showScreenshotStatus({
+        kind: 'error',
+        message: 'Screenshots eingebetteter Online-Videos werden nicht unterstützt.'
+      }, 5000)
+      return
+    }
+
+    const viewport = videoStageViewportRef.current
+    const bounds = viewport.getBoundingClientRect()
+    const video = videoRef.current
+    const fittedRect = zoom.fittedVideoRect
+    if (
+      bounds.width <= 0 || bounds.height <= 0 ||
+      video.videoWidth <= 0 || video.videoHeight <= 0 ||
+      fittedRect.width <= 0 || fittedRect.height <= 0
+    ) {
+      showScreenshotStatus({ kind: 'error', message: 'Screenshot konnte nicht erstellt werden.' })
+      return
+    }
+
+    screenshotCaptureInProgressRef.current = true
+    showScreenshotStatus({ kind: 'saving', message: 'Screenshot wird gespeichert …' }, 10000)
+
+    try {
+      const pixelRatio = Math.max(1, window.devicePixelRatio || 1)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(bounds.width * pixelRatio))
+      canvas.height = Math.max(1, Math.round(bounds.height * pixelRatio))
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('Die Screenshot-Zeichenfläche ist nicht verfügbar.')
+
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+      context.fillStyle = '#000'
+      context.fillRect(0, 0, bounds.width, bounds.height)
+      context.filter = buildCssFilter(filterSettings)
+      context.drawImage(
+        video,
+        fittedRect.left + zoom.zoomOffset.x,
+        fittedRect.top + zoom.zoomOffset.y,
+        fittedRect.width * zoom.zoomLevel,
+        fittedRect.height * zoom.zoomLevel
+      )
+
+      const pngBlob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob)
+          else reject(new Error('Das Videobild konnte nicht als PNG erzeugt werden.'))
+        }, 'image/png')
+      })
+      const imageBytes = new Uint8Array(await pngBlob.arrayBuffer())
+      const videoName = selectedVideo.fileName.replace(/\.[^.]+$/, '')
+      const videoTime = formatClockTime(playback.currentTime).replaceAll(':', '-')
+      const result = await captureScreenshot(imageBytes, `${videoName}_${videoTime}`)
+      const savedFileName = result.filePath.split(/[\\/]/).pop() ?? result.filePath
+      showScreenshotStatus({ kind: 'saved', message: `Screenshot gespeichert: ${savedFileName}` })
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      showScreenshotStatus({ kind: 'error', message: `Screenshot fehlgeschlagen: ${detail}` }, 5000)
+    } finally {
+      screenshotCaptureInProgressRef.current = false
+    }
+  })
+
   // Global keyboard shortcuts
   const onKeyboardShortcut = useEffectEvent((event: KeyboardEvent): void => {
     const target = event.target as HTMLElement | null
@@ -291,6 +411,12 @@ export function VideoWorkspace({
         (target instanceof HTMLElement && target.isContentEditable)
       )
     if (isTyping) return
+
+    if (event.code === 'KeyS' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault()
+      if (!event.repeat) void captureCurrentView()
+      return
+    }
 
     if (event.code === 'Space') {
       event.preventDefault()
@@ -693,6 +819,7 @@ export function VideoWorkspace({
           <kbd>N</kbd><span>Nur Segmente abspielen ein-/ausschalten</span>
           <kbd>F</kbd><span>Filter ein-/ausblenden</span>
           <kbd>R</kbd><span>Einzelwiederholung umschalten</span>
+          <kbd>S</kbd><span>Screenshot speichern</span>
           <kbd>Z</kbd><span>Zoom-Steuerung ein-/ausblenden</span>
           <kbd>F11</kbd><span>Vollbild</span>
           <kbd>M</kbd><span>Stummschalten ein-/ausschalten</span>
@@ -779,11 +906,12 @@ export function VideoWorkspace({
     </div>
   )
 
-  const fullscreenOrientation = isFullscreen && fullscreenStarted && fullscreenOrientationVisible && activeFullscreenFlyout !== 'bottom' ? (
+  const fullscreenOrientation = isFullscreen && fullscreenStarted && fullscreenOrientationVisible ? (
     <div
-      className={`fullscreen-orientation${playback.isPlaying ? ' fullscreen-orientation--playing' : ''}`}
+      className={`fullscreen-orientation${playback.isPlaying ? ' fullscreen-orientation--playing' : ''}${activeFullscreenFlyout === 'bottom' ? ' fullscreen-orientation--controls-open' : ''}`}
       data-testid="fullscreen-orientation"
       aria-label="Zeit- und Segmentorientierung"
+      style={{ '--fullscreen-controls-height': `${fullscreenBottomFlyoutHeight}px` } as React.CSSProperties}
     >
       {hasMatchClock ? (
         <div className="fullscreen-orientation__item fullscreen-orientation__item--primary">
@@ -995,7 +1123,7 @@ export function VideoWorkspace({
       </div>
 
       <button aria-controls="fullscreen-flyout-bottom" aria-expanded={activeFullscreenFlyout === 'bottom'} aria-pressed={pinnedFullscreenFlyout === 'bottom'} aria-label={pinnedFullscreenFlyout === 'bottom' ? 'Steuerung angeheftet; klicken zum Lösen' : 'Wiedergabe und Timeline einblenden'} className={`fullscreen-edge-trigger fullscreen-edge-trigger--bottom${pinnedFullscreenFlyout === 'bottom' ? ' fullscreen-edge-trigger--pinned' : ''}`} type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('bottom')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('bottom')} onFocus={() => handleFullscreenFlyoutMouseEnter('bottom')} onBlur={() => handleFullscreenFlyoutMouseLeave('bottom')} onClick={() => toggleFullscreenFlyout('bottom')}><span>Steuerung</span>{pinnedFullscreenFlyout === 'bottom' ? <FlyoutPinIndicator /> : null}</button>
-      <div aria-hidden={activeFullscreenFlyout !== 'bottom'} className={`fullscreen-flyout-panel fullscreen-flyout-panel--bottom ${activeFullscreenFlyout === 'bottom' ? 'fullscreen-flyout-panel--open' : ''}`} id="fullscreen-flyout-bottom" inert={activeFullscreenFlyout !== 'bottom'} onMouseEnter={() => handleFullscreenFlyoutMouseEnter('bottom')} onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) handleFullscreenFlyoutMouseLeave('bottom') }} onFocus={() => handleFullscreenFlyoutMouseEnter('bottom')} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) handleFullscreenFlyoutMouseLeave('bottom') }}>
+      <div aria-hidden={activeFullscreenFlyout !== 'bottom'} className={`fullscreen-flyout-panel fullscreen-flyout-panel--bottom ${activeFullscreenFlyout === 'bottom' ? 'fullscreen-flyout-panel--open' : ''}`} id="fullscreen-flyout-bottom" inert={activeFullscreenFlyout !== 'bottom'} onMouseEnter={() => handleFullscreenFlyoutMouseEnter('bottom')} onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) handleFullscreenFlyoutMouseLeave('bottom') }} onFocus={() => handleFullscreenFlyoutMouseEnter('bottom')} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) handleFullscreenFlyoutMouseLeave('bottom') }} ref={fullscreenBottomFlyoutRef}>
         <div className="fullscreen-card fullscreen-card--stacked">
           {timeline}
           {timeRow}
@@ -1151,6 +1279,11 @@ export function VideoWorkspace({
                 ) : null}
                 {fullscreenOrientation}
                 {fullscreenPlaybackBanner}
+                {screenshotStatus ? (
+                  <div className={`screenshot-status screenshot-status--${screenshotStatus.kind}`} role="status" aria-live="polite">
+                    {screenshotStatus.message}
+                  </div>
+                ) : null}
               </div>
 
               {zoomControls}

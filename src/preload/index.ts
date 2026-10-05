@@ -14,6 +14,7 @@ const desktopApi: DesktopApi = {
   storeTimelinePreviewSheet: (sourcePath, sheet) => ipcRenderer.invoke('preview:storeSheet', sourcePath, sheet),
   markTimelinePreviewPhaseComplete: (sourcePath, phase) => ipcRenderer.invoke('preview:markComplete', sourcePath, phase),
   getTimelinePreviewFrame: (sourcePath: string, seconds: number) => ipcRenderer.invoke('preview:getFrame', sourcePath, seconds),
+  captureScreenshot: (imageBytes, suggestedBaseName) => ipcRenderer.invoke('screenshot:save', imageBytes, suggestedBaseName),
   pickCsvFile: () => ipcRenderer.invoke('dialog:pickCsvFile'),
   saveCsvFile: (content: string) => ipcRenderer.invoke('dialog:saveCsvFile', content),
   loadStoredPresets: () => ipcRenderer.invoke('presets:load'),

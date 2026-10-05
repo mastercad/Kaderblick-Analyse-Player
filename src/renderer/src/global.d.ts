@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { AppInfo, AppSettingsExport, CsvFileDescriptor, FilterPreset, TimelinePreviewCacheState, TimelinePreviewFileInfo, TimelinePreviewFrame, TimelinePreviewSheet, VideoFileDescriptor, VideoPreparationProgress } from '../../common/types'
+import type { AppInfo, AppSettingsExport, CsvFileDescriptor, FilterPreset, ScreenshotSaveResult, TimelinePreviewCacheState, TimelinePreviewFileInfo, TimelinePreviewFrame, TimelinePreviewSheet, VideoFileDescriptor, VideoPreparationProgress } from '../../common/types'
 
 // ─── YouTube IFrame Player API ────────────────────────────────────────────────
 interface YTPlayerOptions {
@@ -74,6 +74,7 @@ interface DesktopApi {
   storeTimelinePreviewSheet: (sourcePath: string, sheet: TimelinePreviewSheet) => Promise<void>
   markTimelinePreviewPhaseComplete: (sourcePath: string, phase: 'coarse' | 'fine') => Promise<void>
   getTimelinePreviewFrame: (sourcePath: string, seconds: number) => Promise<TimelinePreviewFrame | null>
+  captureScreenshot: (imageBytes: Uint8Array, suggestedBaseName: string) => Promise<ScreenshotSaveResult>
   pickCsvFile: () => Promise<CsvFileDescriptor | undefined>
   saveCsvFile: (content: string) => Promise<boolean>
   loadStoredPresets: () => Promise<FilterPreset[]>

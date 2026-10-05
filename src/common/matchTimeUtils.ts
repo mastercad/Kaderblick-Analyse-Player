@@ -32,28 +32,35 @@ export const findMatchVideoSeekTarget = (
   matchSeconds: number
 ): MatchVideoSeekTarget | null => {
   const matchGroupId = currentVideo.matchGroupId?.trim()
-  if (!matchGroupId) return null
-
-  const normalizedGroupId = matchGroupId.toLocaleLowerCase()
   const halfDurationSeconds = currentVideo.matchDurationSeconds ?? DEFAULT_HALF_DURATION_SECONDS
   const targetHalf: 1 | 2 = matchSeconds < halfDurationSeconds ? 1 : 2
-  const candidate = videos.find((video) =>
-    video.matchGroupId?.trim().toLocaleLowerCase() === normalizedGroupId &&
-    video.matchHalf === targetHalf &&
-    video.kickoffVideoSeconds !== undefined
-  )
-  if (!candidate) return null
+  const candidates = matchGroupId
+    ? videos.filter((video) =>
+        video.matchGroupId?.trim().toLocaleLowerCase() === matchGroupId.toLocaleLowerCase() &&
+        video.matchHalf === targetHalf &&
+        video.kickoffVideoSeconds !== undefined
+      )
+    : videos.filter((video) =>
+        !video.matchGroupId?.trim() &&
+        video.matchHalf === targetHalf &&
+        video.kickoffVideoSeconds !== undefined
+      )
 
-  const videoSeconds = matchTimeToVideoTime(
-    matchSeconds,
-    candidate.kickoffVideoSeconds!,
-    candidate.matchHalf!,
-    candidate.matchDurationSeconds ?? halfDurationSeconds
-  )
-  if (videoSeconds < 0 || ((candidate.durationSeconds ?? 0) > 0 && videoSeconds > candidate.durationSeconds!)) {
-    return null
+  // An empty game id deliberately groups all other ungrouped videos into the
+  // same game. If several files represent the requested half, use the first
+  // one whose mapped position is actually contained in that file.
+  for (const candidate of candidates) {
+    const videoSeconds = matchTimeToVideoTime(
+      matchSeconds,
+      candidate.kickoffVideoSeconds!,
+      candidate.matchHalf!,
+      candidate.matchDurationSeconds ?? halfDurationSeconds
+    )
+    if (videoSeconds >= 0 && ((candidate.durationSeconds ?? 0) <= 0 || videoSeconds <= candidate.durationSeconds!)) {
+      return { video: candidate, videoSeconds }
+    }
   }
-  return { video: candidate, videoSeconds }
+  return null
 }
 
 const getVideosInMatch = (
@@ -61,8 +68,10 @@ const getVideosInMatch = (
   currentVideo: VideoFileDescriptor
 ): VideoFileDescriptor[] => {
   const groupId = currentVideo.matchGroupId?.trim().toLocaleLowerCase()
-  if (!groupId) return [currentVideo]
-  return videos.filter((video) => video.matchGroupId?.trim().toLocaleLowerCase() === groupId)
+  return videos.filter((video) => {
+    const candidateGroupId = video.matchGroupId?.trim().toLocaleLowerCase()
+    return groupId ? candidateGroupId === groupId : !candidateGroupId
+  })
 }
 
 export const resolvePlayerJumpTarget = (

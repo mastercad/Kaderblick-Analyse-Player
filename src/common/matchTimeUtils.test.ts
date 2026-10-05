@@ -61,4 +61,60 @@ describe('match time conversion', () => {
       videoSeconds: 25 * 60 + 10
     })
   })
+
+  it('automatically treats ungrouped halves as videos of the same game', () => {
+    const firstHalf: VideoFileDescriptor = {
+      path: '/first',
+      fileName: 'first.mp4',
+      fileUrl: 'file:///first.mp4',
+      playbackMode: 'direct',
+      durationSeconds: 3290.88,
+      matchHalf: 1,
+      kickoffVideoSeconds: 90,
+      matchDurationSeconds: 45 * 60
+    }
+    const secondHalf: VideoFileDescriptor = {
+      path: '/second',
+      fileName: 'second.mp4',
+      fileUrl: 'file:///second.mp4',
+      playbackMode: 'direct',
+      durationSeconds: 3027.84,
+      matchHalf: 2,
+      kickoffVideoSeconds: 254,
+      matchDurationSeconds: 45 * 60
+    }
+
+    expect(resolvePlayerJumpTarget(
+      'match-cumulative',
+      [secondHalf, firstHalf],
+      secondHalf,
+      23 * 60 + 45
+    )).toEqual({
+      video: firstHalf,
+      videoSeconds: 25 * 60 + 15
+    })
+  })
+
+  it('uses the first fitting ungrouped video when several files represent the same half', () => {
+    const currentVideo: VideoFileDescriptor = {
+      path: '/second', fileName: 'second.mp4', fileUrl: 'file:///second.mp4', playbackMode: 'direct',
+      durationSeconds: 50 * 60, matchHalf: 2, kickoffVideoSeconds: 4 * 60, matchDurationSeconds: 45 * 60
+    }
+    const makeFirstHalf = (path: string): VideoFileDescriptor => ({
+      path, fileName: `${path}.mp4`, fileUrl: `file://${path}.mp4`, playbackMode: 'direct',
+      durationSeconds: 50 * 60, matchHalf: 1, kickoffVideoSeconds: 90, matchDurationSeconds: 45 * 60
+    })
+
+    const firstHalfA = makeFirstHalf('/first-a')
+    const firstHalfB = makeFirstHalf('/first-b')
+    expect(resolvePlayerJumpTarget(
+      'match-cumulative',
+      [firstHalfA, currentVideo, firstHalfB],
+      currentVideo,
+      23 * 60 + 45
+    )).toEqual({
+      video: firstHalfA,
+      videoSeconds: 25 * 60 + 15
+    })
+  })
 })

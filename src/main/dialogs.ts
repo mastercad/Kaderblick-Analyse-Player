@@ -1,14 +1,65 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import { BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog } from 'electron'
 import { normalizeImportedPresets } from '../common/filterUtils'
-import type { AppSettingsExport, CsvFileDescriptor, FilterPreset, VideoFileDescriptor } from '../common/types'
+import type { AppSettingsExport, CsvFileDescriptor, FilterPreset, ScreenshotSaveResult, VideoFileDescriptor } from '../common/types'
 import { preparePlaybackFallback, prepareVideoFileForPlayback } from './videoPlayback'
 
 const videoExtensions = ['mp4', 'mov', 'mkv', 'avi', 'm4v', 'webm']
 
 const getActiveWindow = (): BrowserWindow | null => {
   return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
+}
+
+const screenshotTimestamp = (date: Date): string => {
+  const pad = (value: number, length = 2): string => String(value).padStart(length, '0')
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate())
+  ].join('-') + '_' + [
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+    pad(date.getMilliseconds(), 3)
+  ].join('-')
+}
+
+const sanitizeScreenshotBaseName = (value: string): string => {
+  return value
+    .replace(/\.png$/i, '')
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 100) || 'video'
+}
+
+export const captureAndSaveScreenshot = async (
+  imageBytes: Uint8Array,
+  suggestedBaseName: string
+): Promise<ScreenshotSaveResult> => {
+  const png = Buffer.from(imageBytes)
+  const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+  if (png.length < pngSignature.length || !pngSignature.every((byte, index) => png[index] === byte)) {
+    throw new Error('Die Screenshot-Daten sind kein gültiges PNG.')
+  }
+
+  const screenshotDirectory = path.join(app.getPath('pictures'), 'Kaderblick Screenshots')
+  await fs.mkdir(screenshotDirectory, { recursive: true })
+  const baseName = `${sanitizeScreenshotBaseName(suggestedBaseName)}_${screenshotTimestamp(new Date())}`
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const suffix = attempt === 0 ? '' : `-${attempt + 1}`
+    const filePath = path.join(screenshotDirectory, `${baseName}${suffix}.png`)
+    try {
+      await fs.writeFile(filePath, png, { flag: 'wx' })
+      return { filePath }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+    }
+  }
+
+  throw new Error('Für den Screenshot konnte kein eindeutiger Dateiname erzeugt werden.')
 }
 
 export const pickVideoFile = async (ownerWindow?: BrowserWindow | null): Promise<VideoFileDescriptor | undefined> => {

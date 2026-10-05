@@ -528,7 +528,28 @@ export function useVideoPlayback({
     // visibly flashes to Pause and back for every keyboard step.
     if (resumeForwardPlayback) videoRef.current.pause()
     const delta = direction === 'forward' ? FRAME_STEP_SECONDS : -FRAME_STEP_SECONDS
-    seekTo(Math.max(0, Math.min(getEffectiveMaxDuration(), getEffectiveCurrentTime() + delta)))
+    const targetTime = Math.max(0, Math.min(getEffectiveMaxDuration(), getEffectiveCurrentTime() + delta))
+    const streamRelativeTime = targetTime - streamStartSecondsRef.current
+    const canSeekWithinCurrentStream =
+      selectedVideo.playbackMode === 'stream' &&
+      !isStreamSeekRef.current &&
+      streamRelativeTime >= 0 &&
+      (
+        videoRef.current.duration <= 0 ||
+        !Number.isFinite(videoRef.current.duration) ||
+        streamRelativeTime <= videoRef.current.duration
+      )
+
+    if (canSeekWithinCurrentStream) {
+      // Replacing the stream URL for a one-frame step clears Chromium's decoded frame
+      // and briefly exposes the video's black background. Seek inside the already loaded
+      // fMP4 stream instead; only fall back to a new stream when crossing its start.
+      videoRef.current.currentTime = streamRelativeTime
+      setCurrentTime(targetTime)
+      setActiveSegmentIndex(findActiveSegmentIndex(segments, targetTime))
+    } else {
+      seekTo(targetTime)
+    }
     if (resumeForwardPlayback) {
       void videoRef.current.play().catch((error: unknown) => {
         if (isPlayInterruptedByPause(error)) return

@@ -88,6 +88,25 @@ describe('VideoWorkspace – stream mode duration', () => {
 })
 
 describe('VideoWorkspace – stream seek / timeupdate guard', () => {
+  it('steps within the loaded stream without replacing the video source', () => {
+    render(
+      <VideoWorkspace {...baseProps} selectedVideo={makeStreamDescriptor({ durationSeconds: 5400 })}>
+        <div />
+      </VideoWorkspace>
+    )
+
+    const videoEl = document.querySelector('video')!
+    fireLoadedMetadata(videoEl, 0)
+    videoEl.currentTime = 30
+    act(() => { fireEvent(videoEl, new Event('timeupdate')) })
+    const sourceBeforeStep = videoEl.src
+
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Ein Bild vor' })) })
+
+    expect(videoEl.src).toBe(sourceBeforeStep)
+    expect(videoEl.currentTime).toBeCloseTo(30 + (1 / 25), 6)
+  })
+
   it('ignores timeupdate from old stream after seekTo to prevent currentTime overshooting duration', () => {
     render(
       <VideoWorkspace {...baseProps} selectedVideo={makeStreamDescriptor({ durationSeconds: 5400 })}>

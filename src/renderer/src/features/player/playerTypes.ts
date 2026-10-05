@@ -5,7 +5,7 @@ export type Size = { width: number; height: number }
 export type VideoRect = { left: number; top: number; width: number; height: number }
 
 export const MIN_ZOOM_LEVEL = 1
-export const MAX_ZOOM_LEVEL = 4
+export const MAX_ZOOM_LEVEL = 10
 export const ZOOM_STEP = 0.25
 export const FRAME_STEP_SECONDS = 1 / 25
 export const SEEK_STEP_SECONDS = 5
