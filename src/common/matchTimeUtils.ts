@@ -74,6 +74,39 @@ const getVideosInMatch = (
   })
 }
 
+export const videoTimeToPlayerInput = (
+  mode: PlayerJumpTimeMode,
+  videos: VideoFileDescriptor[],
+  video: VideoFileDescriptor,
+  videoSeconds: number
+): number | null => {
+  if (mode === 'video-per-file') return videoSeconds
+
+  if (mode === 'match-per-part') {
+    if (video.kickoffVideoSeconds === undefined) return null
+    return videoSeconds - video.kickoffVideoSeconds
+  }
+
+  if (mode === 'match-cumulative') {
+    if (video.kickoffVideoSeconds === undefined || video.matchHalf === undefined) return null
+    return videoTimeToMatchTime(
+      videoSeconds,
+      video.kickoffVideoSeconds,
+      video.matchHalf,
+      video.matchDurationSeconds
+    )
+  }
+
+  let elapsedSeconds = 0
+  for (const matchVideo of getVideosInMatch(videos, video)) {
+    if (matchVideo.path === video.path) return elapsedSeconds + videoSeconds
+    const duration = matchVideo.durationSeconds ?? 0
+    if (duration <= 0) return null
+    elapsedSeconds += duration
+  }
+  return null
+}
+
 export const resolvePlayerJumpTarget = (
   mode: PlayerJumpTimeMode,
   videos: VideoFileDescriptor[],

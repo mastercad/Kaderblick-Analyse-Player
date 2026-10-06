@@ -55,6 +55,12 @@ describe('SegmentList', () => {
     expect(screen.getAllByRole('button')).toHaveLength(2)
   })
 
+  it('shows the summed duration of all segments in the current video', () => {
+    render(<SegmentList segments={twoSegments} activeSegmentIndex={-1} onSelectSegment={() => {}} />)
+
+    expect(screen.getByLabelText('2 Segmente mit 01:00 Gesamtdauer')).toBeInTheDocument()
+  })
+
   it('marks the active segment with segment-card--active class', () => {
     render(<SegmentList segments={twoSegments} activeSegmentIndex={1} onSelectSegment={() => {}} />)
 

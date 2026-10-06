@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { VideoFileDescriptor } from './types'
-import { findMatchVideoSeekTarget, matchTimeToVideoTime, resolvePlayerJumpTarget, videoTimeToMatchTime } from './matchTimeUtils'
+import { findMatchVideoSeekTarget, matchTimeToVideoTime, resolvePlayerJumpTarget, videoTimeToMatchTime, videoTimeToPlayerInput } from './matchTimeUtils'
 
 describe('match time conversion', () => {
   it('uses the kickoff position for the first half', () => {
@@ -116,5 +116,22 @@ describe('match time conversion', () => {
       video: firstHalfA,
       videoSeconds: 25 * 60 + 15
     })
+  })
+
+  it('converts absolute video positions back to all supported input formats', () => {
+    const firstHalf: VideoFileDescriptor = {
+      path: '/first', fileName: 'first.mp4', fileUrl: 'file:///first.mp4', playbackMode: 'direct',
+      durationSeconds: 55 * 60, matchGroupId: 'Spiel 1', matchHalf: 1, kickoffVideoSeconds: 2 * 60, matchDurationSeconds: 45 * 60
+    }
+    const secondHalf: VideoFileDescriptor = {
+      path: '/second', fileName: 'second.mp4', fileUrl: 'file:///second.mp4', playbackMode: 'direct',
+      durationSeconds: 50 * 60, matchGroupId: 'Spiel 1', matchHalf: 2, kickoffVideoSeconds: 3 * 60, matchDurationSeconds: 45 * 60
+    }
+    const videos = [firstHalf, secondHalf]
+
+    expect(videoTimeToPlayerInput('video-per-file', videos, secondHalf, 12 * 60 + 45)).toBe(12 * 60 + 45)
+    expect(videoTimeToPlayerInput('video-cumulative', videos, secondHalf, 12 * 60 + 45)).toBe(67 * 60 + 45)
+    expect(videoTimeToPlayerInput('match-per-part', videos, secondHalf, 12 * 60 + 45)).toBe(9 * 60 + 45)
+    expect(videoTimeToPlayerInput('match-cumulative', videos, secondHalf, 12 * 60 + 45)).toBe(54 * 60 + 45)
   })
 })

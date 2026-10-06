@@ -16,6 +16,8 @@ export function SegmentList({
   collapsed = false,
   onCollapsedChange
 }: SegmentListProps) {
+  const totalDurationSeconds = segments.reduce((total, segment) => total + segment.lengthSeconds, 0)
+
   return (
     <section className={`panel segment-list-panel${collapsed ? ' segment-list-panel--collapsed' : ''}`}>
       <div className="panel__header">
@@ -24,7 +26,10 @@ export function SegmentList({
           <h2>Szenen im aktuellen Video</h2>
         </div>
         <div className="segment-list-panel__actions">
-          <span className="segment-list-panel__count">{segments.length}</span>
+          <span className="segment-list-panel__summary" aria-label={segments.length > 0 ? `${segments.length} Segmente mit ${formatClockTime(totalDurationSeconds)} Gesamtdauer` : 'Keine Segmente'}>
+            <span className="segment-list-panel__count">{segments.length}</span>
+            {segments.length > 0 ? <span className="segment-list-panel__duration">{formatClockTime(totalDurationSeconds)}</span> : null}
+          </span>
           {onCollapsedChange ? (
             <button
               className="segment-list-panel__toggle"

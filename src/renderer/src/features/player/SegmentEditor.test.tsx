@@ -337,6 +337,55 @@ describe('SegmentEditor', () => {
     })
   })
 
+  describe('duration summary', () => {
+    it('shows segment durations per video and as a total', () => {
+      render(
+        <SegmentEditor
+          videos={twoVideos}
+          initialSegments={[
+            makeSegment({ id: 'a', sourceVideoName: vid1.fileName, sourceVideoPath: vid1.path, startSeconds: 60, endSeconds: 90, lengthSeconds: 30 }),
+            makeSegment({ id: 'b', sourceVideoName: vid1.fileName, sourceVideoPath: vid1.path, startSeconds: 120, endSeconds: 165, lengthSeconds: 45 }),
+            makeSegment({ id: 'c', sourceVideoName: vid2.fileName, sourceVideoPath: vid2.path, startSeconds: 10, endSeconds: 30, lengthSeconds: 20 })
+          ]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      const summary = screen.getByRole('region', { name: 'Summierte Segmentdauer' })
+      expect(within(summary).getByText('vid1.mp4')).toBeInTheDocument()
+      expect(within(summary).getByText('01:15')).toBeInTheDocument()
+      expect(within(summary).getByText('vid2.mp4')).toBeInTheDocument()
+      expect(within(summary).getByText('00:20')).toBeInTheDocument()
+      expect(within(summary).getByLabelText('Gesamtdauer 01:35')).toBeInTheDocument()
+    })
+
+    it('does not include incomplete rows in the duration summary', () => {
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          initialSegments={[]}
+          initialDrafts={[
+            {
+              draftId: 'valid', videoPath: vid1.path, startTimeInput: '01:00', endTimeInput: '01:30',
+              title: '', subTitle: '', audioEnabled: true
+            },
+            {
+              draftId: 'incomplete', videoPath: vid1.path, startTimeInput: '02:00', endTimeInput: '',
+              title: '', subTitle: '', audioEnabled: true
+            }
+          ]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      expect(screen.getByLabelText('Gesamtdauer 00:30')).toBeInTheDocument()
+    })
+  })
+
   describe('load segments', () => {
     it('calls onLoad with correct startSeconds and lengthSeconds', () => {
       render(
@@ -377,6 +426,113 @@ describe('SegmentEditor', () => {
         expect.objectContaining({ startSeconds: 300 }), // first in list
         expect.objectContaining({ startSeconds: 90 })   // second in list
       ])
+    })
+
+    it('converts cumulative match times in the second half to absolute video times', () => {
+      const firstHalf = {
+        ...makeVideo('first.mp4'),
+        durationSeconds: 55 * 60,
+        matchGroupId: 'Spiel 1',
+        matchHalf: 1 as const,
+        kickoffVideoSeconds: 2 * 60,
+        matchDurationSeconds: 45 * 60
+      }
+      const secondHalf = {
+        ...makeVideo('second.mp4'),
+        durationSeconds: 50 * 60,
+        matchGroupId: 'Spiel 1',
+        matchHalf: 2 as const,
+        kickoffVideoSeconds: 3 * 60,
+        matchDurationSeconds: 45 * 60
+      }
+      render(
+        <SegmentEditor
+          videos={[firstHalf, secondHalf]}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      const [row] = getDataRows()
+      fireEvent.change(within(row).getByRole('combobox', { name: 'Video für Segment 1' }), { target: { value: secondHalf.path } })
+      fireEvent.change(screen.getByRole('combobox', { name: 'Zeitformat der Segment-Eingaben' }), { target: { value: 'match-cumulative' } })
+      const inputs = getTextInputs(row)
+      fireEvent.change(inputs[0], { target: { value: '54:45' } })
+      fireEvent.change(inputs[1], { target: { value: '55:45' } })
+      fireEvent.click(screen.getByText('Laden'))
+
+      expect(onLoad).toHaveBeenCalledWith([
+        expect.objectContaining({
+          sourceVideoPath: secondHalf.path,
+          startSeconds: 12 * 60 + 45,
+          endSeconds: 13 * 60 + 45,
+          lengthSeconds: 60
+        })
+      ])
+    })
+
+    it('converts cumulative video times using the durations of preceding files', () => {
+      const firstVideo = { ...makeVideo('first.mp4'), durationSeconds: 55 * 60 }
+      const secondVideo = { ...makeVideo('second.mp4'), durationSeconds: 50 * 60 }
+      render(
+        <SegmentEditor
+          videos={[firstVideo, secondVideo]}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      const [row] = getDataRows()
+      fireEvent.change(within(row).getByRole('combobox', { name: 'Video für Segment 1' }), { target: { value: secondVideo.path } })
+      fireEvent.change(screen.getByRole('combobox', { name: 'Zeitformat der Segment-Eingaben' }), { target: { value: 'video-cumulative' } })
+      const inputs = getTextInputs(row)
+      fireEvent.change(inputs[0], { target: { value: '60:00' } })
+      fireEvent.change(inputs[1], { target: { value: '61:00' } })
+      fireEvent.click(screen.getByText('Laden'))
+
+      expect(onLoad).toHaveBeenCalledWith([
+        expect.objectContaining({
+          sourceVideoPath: secondVideo.path,
+          startSeconds: 5 * 60,
+          endSeconds: 6 * 60,
+          lengthSeconds: 60
+        })
+      ])
+    })
+
+    it('reformats existing absolute segment times when the input format changes', () => {
+      const secondHalf = {
+        ...makeVideo('second.mp4'),
+        durationSeconds: 50 * 60,
+        matchGroupId: 'Spiel 1',
+        matchHalf: 2 as const,
+        kickoffVideoSeconds: 3 * 60,
+        matchDurationSeconds: 45 * 60
+      }
+      render(
+        <SegmentEditor
+          videos={[secondHalf]}
+          initialSegments={[makeSegment({
+            sourceVideoName: secondHalf.fileName,
+            sourceVideoPath: secondHalf.path,
+            startSeconds: 12 * 60 + 45,
+            endSeconds: 13 * 60 + 45,
+            lengthSeconds: 60
+          })]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      fireEvent.change(screen.getByRole('combobox', { name: 'Zeitformat der Segment-Eingaben' }), { target: { value: 'match-cumulative' } })
+
+      expect(screen.getByDisplayValue('54:45')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('55:45')).toBeInTheDocument()
     })
   })
 
