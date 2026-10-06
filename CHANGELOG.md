@@ -1,3 +1,10 @@
+# [2.8.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.7.0...v2.8.0) (2026-10-06)
+
+
+### Features
+
+* **player:** support flexible segment times ([d792e69](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/d792e699e9024bd0578c6ef910ae1f4503caf526))
+
 # [2.7.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.6.0...v2.7.0) (2026-10-05)
 
 
