@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { SettingsDialog } from './SettingsDialog'
 
 describe('SettingsDialog', () => {
-  it('offers the four jump-time interpretations without changing segment times', () => {
+  it('offers the four playback interpretations for fixed jump and segment times', () => {
     const onJumpTimeModeChange = vi.fn()
     render(
       <SettingsDialog
@@ -17,7 +17,7 @@ describe('SettingsDialog', () => {
     expect(screen.getByRole('radio', { name: /Videozeit – fortlaufend/ })).not.toBeChecked()
     expect(screen.getByRole('radio', { name: /Spielzeit – je Halbzeit\/Teil/ })).not.toBeChecked()
     expect(screen.getByRole('radio', { name: /Spielzeit – fortlaufend/ })).toBeChecked()
-    expect(screen.getByText(/CSV- und Segmentzeiten bleiben immer direkte Videozeiten/)).toBeInTheDocument()
+    expect(screen.getByText(/unverändert gespeicherten Segmentzeiten bei der Wiedergabe interpretiert/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('radio', { name: /Videozeit – je Video/ }))
     expect(onJumpTimeModeChange).toHaveBeenCalledWith('video-per-file')

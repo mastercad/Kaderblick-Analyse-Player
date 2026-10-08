@@ -1,8 +1,8 @@
 import { cloneElement, isValidElement, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react'
 import { buildCssFilter } from '../../../../common/filterUtils'
 import { findActiveSegmentIndex, parseTimeInput } from '../../../../common/segmentUtils'
-import { formatClockTime } from '../../../../common/timeUtils'
-import { getHalfStartSeconds, resolvePlayerJumpTarget, videoTimeToMatchTime } from '../../../../common/matchTimeUtils'
+import { formatClockTime, formatSegmentTime } from '../../../../common/timeUtils'
+import { getHalfStartSeconds, resolvePlayerJumpTarget, videoTimeToPlayerInput } from '../../../../common/matchTimeUtils'
 import type { FilterSettings, PlayerJumpTimeMode, Segment, VideoFileDescriptor } from '../../../../common/types'
 import appLogo from '../../../../../assets/kaderblick_analyse_player_appicon.svg'
 import { SegmentList } from './SegmentList'
@@ -21,6 +21,7 @@ interface VideoWorkspaceProps {
   matchVideos?: VideoFileDescriptor[]
   jumpTimeMode?: PlayerJumpTimeMode
   segments: Segment[]
+  segmentDisplayTimes?: Segment[]
   filterSettings: FilterSettings
   filterOverlayVisible: boolean
   repeatSingleSegment: boolean
@@ -81,6 +82,7 @@ export function VideoWorkspace({
   matchVideos = [],
   jumpTimeMode = 'match-cumulative',
   segments,
+  segmentDisplayTimes,
   filterSettings,
   filterOverlayVisible,
   repeatSingleSegment,
@@ -571,12 +573,7 @@ export function VideoWorkspace({
 
   const hasMatchClock = selectedVideo?.matchHalf !== undefined && selectedVideo.kickoffVideoSeconds !== undefined
   const currentMatchTime = hasMatchClock
-    ? videoTimeToMatchTime(
-        playback.currentTime,
-        selectedVideo.kickoffVideoSeconds!,
-        selectedVideo.matchHalf!,
-        selectedVideo.matchDurationSeconds
-      )
+    ? videoTimeToPlayerInput('match-cumulative', matchVideos, selectedVideo, playback.currentTime)
     : null
   const isMatchJumpMode = jumpTimeMode === 'match-per-part' || jumpTimeMode === 'match-cumulative'
   const canUseTimeJump = Boolean(selectedVideo) && (!isMatchJumpMode || hasMatchClock)
@@ -588,30 +585,15 @@ export function VideoWorkspace({
   }
   const currentJumpTime = (() => {
     if (!selectedVideo) return null
-    if (jumpTimeMode === 'video-per-file') return playback.currentTime
-    if (jumpTimeMode === 'match-per-part') {
-      return selectedVideo.kickoffVideoSeconds === undefined
-        ? null
-        : playback.currentTime - selectedVideo.kickoffVideoSeconds
-    }
-    if (jumpTimeMode === 'match-cumulative') return currentMatchTime
-
-    const groupId = selectedVideo.matchGroupId?.trim().toLocaleLowerCase()
-    const groupedVideos = groupId
-      ? matchVideos.filter((video) => video.matchGroupId?.trim().toLocaleLowerCase() === groupId)
-      : [selectedVideo]
-    let cumulativeSeconds = 0
-    for (const video of groupedVideos) {
-      if (video.path === selectedVideo.path) return cumulativeSeconds + playback.currentTime
-      if ((video.durationSeconds ?? 0) <= 0) return playback.currentTime
-      cumulativeSeconds += video.durationSeconds!
-    }
-    return playback.currentTime
+    return videoTimeToPlayerInput(jumpTimeMode, matchVideos, selectedVideo, playback.currentTime)
   })()
   const orientationSegmentIndex = playback.activeSegmentIndex >= 0
     ? playback.activeSegmentIndex
     : findActiveSegmentIndex(segments, playback.currentTime)
   const orientationSegment = orientationSegmentIndex >= 0 ? segments[orientationSegmentIndex] : undefined
+  const orientationDisplaySegment = orientationSegmentIndex >= 0
+    ? (segmentDisplayTimes?.[orientationSegmentIndex] ?? orientationSegment)
+    : undefined
   const orientationSegmentRemaining = orientationSegment
     ? Math.max(0, orientationSegment.endSeconds - playback.currentTime)
     : 0
@@ -928,7 +910,7 @@ export function VideoWorkspace({
         <div className="fullscreen-orientation__item">
           <span>Segment {orientationSegmentIndex + 1}/{segments.length}</span>
           <strong>noch {formatClockTime(orientationSegmentRemaining)}</strong>
-          <em>{formatClockTime(orientationSegment.startSeconds)}–{formatClockTime(orientationSegment.endSeconds)} · {segmentsAfterCurrent} danach</em>
+          <em>{orientationDisplaySegment ? `${formatSegmentTime(orientationDisplaySegment.startSeconds)}–${formatSegmentTime(orientationDisplaySegment.endSeconds)}` : '–'} · {segmentsAfterCurrent} danach</em>
         </div>
       ) : segments.length > 0 ? (
         <div className="fullscreen-orientation__item">
@@ -1003,7 +985,7 @@ export function VideoWorkspace({
 
   const segmentList = (
     <SegmentList
-      segments={segments}
+      segments={segmentDisplayTimes ?? segments}
       activeSegmentIndex={playback.activeSegmentIndex}
       onSelectSegment={(index) => {
         playback.jumpToSegment(index, false, true)
@@ -1014,7 +996,7 @@ export function VideoWorkspace({
 
   const inlineSegmentList = (
     <SegmentList
-      segments={segments}
+      segments={segmentDisplayTimes ?? segments}
       activeSegmentIndex={playback.activeSegmentIndex}
       collapsed={segmentSidebarCollapsed}
       onCollapsedChange={setSegmentSidebarCollapsed}

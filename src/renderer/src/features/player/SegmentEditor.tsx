@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getBaseName, parseTimeInput, serializeSegmentsToCsv } from '../../../../common/segmentUtils'
-import { resolvePlayerJumpTarget, videoTimeToPlayerInput } from '../../../../common/matchTimeUtils'
-import { formatClockTime } from '../../../../common/timeUtils'
-import type { PlayerJumpTimeMode, Segment, SegmentEditorDraft, VideoFileDescriptor } from '../../../../common/types'
+import { findLoadedVideoForSegment, getBaseName, parseTimeInput, serializeSegmentsToCsv } from '../../../../common/segmentUtils'
+import { formatClockTime, formatSegmentTime } from '../../../../common/timeUtils'
+import type { Segment, SegmentEditorDraft, VideoFileDescriptor } from '../../../../common/types'
 
 interface SegmentEditorProps {
   videos: VideoFileDescriptor[]
@@ -21,23 +20,13 @@ const newDraftId = (() => {
   return () => `draft-${Date.now()}-${++counter}`
 })()
 
-const timeInputModes: Array<{ value: PlayerJumpTimeMode; label: string }> = [
-  { value: 'video-per-file', label: 'Videozeit – je Video' },
-  { value: 'video-cumulative', label: 'Videozeit – fortlaufend' },
-  { value: 'match-per-part', label: 'Spielzeit – je Halbzeit/Teil' },
-  { value: 'match-cumulative', label: 'Spielzeit – fortlaufend' }
-]
-
 const segmentToDraft = (segment: Segment, videos: VideoFileDescriptor[]): SegmentEditorDraft => {
-  const matchedVideo =
-    videos.find((v) => v.path === segment.sourceVideoPath) ??
-    videos.find((v) => v.fileName === segment.sourceVideoName)
+  const matchedVideo = findLoadedVideoForSegment(segment, videos)
   return {
     draftId: newDraftId(),
     videoPath: matchedVideo?.path ?? segment.sourceVideoPath,
-    startTimeInput: formatClockTime(segment.startSeconds),
-    endTimeInput: formatClockTime(segment.startSeconds + segment.lengthSeconds),
-    timeInputMode: 'video-per-file',
+    startTimeInput: formatSegmentTime(segment.startSeconds),
+    endTimeInput: formatSegmentTime(segment.endSeconds),
     title: segment.title,
     subTitle: segment.subTitle,
     audioEnabled: segment.audioTrack === '1'
@@ -49,24 +38,35 @@ const makeDraft = (videoPath: string): SegmentEditorDraft => ({
   videoPath,
   startTimeInput: '',
   endTimeInput: '',
-  timeInputMode: 'video-per-file',
   title: '',
   subTitle: '',
   audioEnabled: true
 })
 
+const normalizeDraft = (draft: SegmentEditorDraft): SegmentEditorDraft => {
+  const storedEndTime = (draft as SegmentEditorDraft & { endTimeInput?: unknown }).endTimeInput
+  if (typeof storedEndTime === 'string') return draft
+
+  // Dev hot reload may preserve a draft created while the second field was
+  // briefly (and incorrectly) treated as a segment length. Convert that
+  // transient shape back to the editor's start/end representation.
+  const storedLengthTime = (draft as SegmentEditorDraft & { lengthTimeInput?: unknown }).lengthTimeInput
+  const startSeconds = parseTimeInput(draft.startTimeInput)
+  const lengthSeconds = typeof storedLengthTime === 'string' ? parseTimeInput(storedLengthTime) : null
+  const endTimeInput = startSeconds !== null && lengthSeconds !== null
+    ? formatSegmentTime(startSeconds + lengthSeconds)
+    : ''
+  const { lengthTimeInput: _discardedLength, ...currentDraft } = draft as SegmentEditorDraft & { lengthTimeInput?: unknown }
+  return { ...currentDraft, endTimeInput }
+}
+
 const resolveDraftTimes = (draft: SegmentEditorDraft, videos: VideoFileDescriptor[]) => {
   const selectedVideo = videos.find((video) => video.path === draft.videoPath)
-  const startInputSeconds = parseTimeInput(draft.startTimeInput)
-  const endInputSeconds = parseTimeInput(draft.endTimeInput)
-  if (!selectedVideo || startInputSeconds === null || endInputSeconds === null) return null
-
-  const mode = draft.timeInputMode ?? 'video-per-file'
-  const start = resolvePlayerJumpTarget(mode, videos, selectedVideo, startInputSeconds)
-  const end = resolvePlayerJumpTarget(mode, videos, selectedVideo, endInputSeconds)
-  if (!start || !end || start.video.path !== end.video.path || start.videoSeconds < 0 || end.videoSeconds <= start.videoSeconds) return null
-  if ((start.video.durationSeconds ?? 0) > 0 && end.videoSeconds > start.video.durationSeconds!) return null
-  return { video: start.video, startSeconds: start.videoSeconds, endSeconds: end.videoSeconds }
+  const startSeconds = parseTimeInput(draft.startTimeInput)
+  const endSeconds = parseTimeInput(typeof draft.endTimeInput === 'string' ? draft.endTimeInput : '')
+  if (!selectedVideo || startSeconds === null || endSeconds === null) return null
+  if (endSeconds <= startSeconds) return null
+  return { video: selectedVideo, startSeconds, endSeconds }
 }
 
 const isDraftValid = (draft: SegmentEditorDraft, videos: VideoFileDescriptor[]): boolean => resolveDraftTimes(draft, videos) !== null
@@ -94,7 +94,7 @@ const draftsToSegments = (drafts: SegmentEditorDraft[], videos: VideoFileDescrip
 export function SegmentEditor({ videos, activeVideoPath, initialSegments, initialDrafts, getCurrentTime, onLoad, onDraftsChange, onVideoSettingsChange, onClose }: SegmentEditorProps) {
   const [drafts, setDrafts] = useState<SegmentEditorDraft[]>(() => {
     if (initialDrafts && initialDrafts.length > 0) {
-      return initialDrafts
+      return initialDrafts.map(normalizeDraft)
     }
     if (initialSegments.length > 0) {
       return initialSegments.map((s) => segmentToDraft(s, videos))
@@ -103,7 +103,6 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
   })
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [timeInputMode, setTimeInputMode] = useState<PlayerJumpTimeMode>(() => initialDrafts?.[0]?.timeInputMode ?? 'video-per-file')
   const [videoSettings, setVideoSettings] = useState(() => videos.map((video) => ({
     path: video.path,
     matchGroupInput: video.matchGroupId ?? '',
@@ -112,19 +111,6 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
     matchDurationInput: formatClockTime(video.matchDurationSeconds ?? 45 * 60)
   })))
   const containerRef = useRef<HTMLDivElement>(null)
-
-  const effectiveVideos = videos.map((video) => {
-    const setting = videoSettings.find((candidate) => candidate.path === video.path)
-    const kickoff = setting ? parseTimeInput(setting.kickoffInput) : null
-    const duration = setting ? parseTimeInput(setting.matchDurationInput) : null
-    return setting && kickoff !== null && duration !== null && duration > 0 ? {
-      ...video,
-      matchGroupId: setting.matchGroupInput.trim() || undefined,
-      matchHalf: setting.half as 1 | 2,
-      kickoffVideoSeconds: kickoff,
-      matchDurationSeconds: duration
-    } : video
-  })
 
   useEffect(() => {
     onDraftsChange?.(drafts)
@@ -174,40 +160,11 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
   }
 
   const setCurrentTimeAsStart = (draftId: string) => {
-    const draft = drafts.find((candidate) => candidate.draftId === draftId)
-    const video = effectiveVideos.find((candidate) => candidate.path === draft?.videoPath)
-    if (!draft || !video) return
-    const inputSeconds = videoTimeToPlayerInput(timeInputMode, effectiveVideos, video, getCurrentTime())
-    if (inputSeconds === null || inputSeconds < 0) return
-    updateDraft(draftId, { startTimeInput: formatClockTime(inputSeconds), timeInputMode })
-  }
-
-  const changeTimeInputMode = (nextMode: PlayerJumpTimeMode) => {
-    setDrafts((previous) => previous.map((draft) => {
-      const selectedVideo = effectiveVideos.find((video) => video.path === draft.videoPath)
-      if (!selectedVideo) return { ...draft, timeInputMode: nextMode }
-      const oldMode = draft.timeInputMode ?? 'video-per-file'
-      let nextVideo = selectedVideo
-      const convert = (value: string): string => {
-        const seconds = parseTimeInput(value)
-        if (seconds === null) return value
-        const target = resolvePlayerJumpTarget(oldMode, effectiveVideos, selectedVideo, seconds)
-        if (!target) return value
-        nextVideo = target.video
-        const converted = videoTimeToPlayerInput(nextMode, effectiveVideos, target.video, target.videoSeconds)
-        return converted === null || converted < 0 ? value : formatClockTime(converted)
-      }
-      const startTimeInput = convert(draft.startTimeInput)
-      const startVideo = nextVideo
-      const endTimeInput = convert(draft.endTimeInput)
-      const videoPath = startVideo.path === nextVideo.path ? nextVideo.path : draft.videoPath
-      return { ...draft, videoPath, startTimeInput, endTimeInput, timeInputMode: nextMode }
-    }))
-    setTimeInputMode(nextMode)
+    updateDraft(draftId, { startTimeInput: formatSegmentTime(getCurrentTime()) })
   }
 
   const exportCsv = async (andLoad: boolean) => {
-    const segments = draftsToSegments(drafts, effectiveVideos)
+    const segments = draftsToSegments(drafts, videos)
     if (segments.length === 0) {
       setErrorMessage('Keine gültigen Segmente zum Exportieren.')
       return
@@ -223,7 +180,7 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
   }
 
   const loadOnly = () => {
-    const segments = draftsToSegments(drafts, effectiveVideos)
+    const segments = draftsToSegments(drafts, videos)
     if (segments.length === 0) {
       setErrorMessage('Keine gültigen Segmente zum Laden.')
       return
@@ -231,9 +188,9 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
     onLoad(segments)
   }
 
-  const hasInvalidRows = drafts.some((draft) => !isDraftValid(draft, effectiveVideos))
-  const validCount = drafts.filter((draft) => isDraftValid(draft, effectiveVideos)).length
-  const previewSegments = draftsToSegments(drafts, effectiveVideos)
+  const hasInvalidRows = drafts.some((draft) => !isDraftValid(draft, videos))
+  const validCount = drafts.filter((draft) => isDraftValid(draft, videos)).length
+  const previewSegments = draftsToSegments(drafts, videos)
   const durationByVideo = videos.map((video) => {
     const videoSegments = previewSegments.filter((segment) => segment.sourceVideoPath === video.path)
     return {
@@ -326,31 +283,18 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
                     </select>
                   </label>
                   <label>
-                    Anstoß im Video
-                    <input aria-label={`Anstoß im Video für ${video?.fileName ?? setting.path}`} value={setting.kickoffInput} placeholder="z. B. 02:41" onChange={(event) => updateVideoSetting(setting.path, { kickoffInput: event.target.value })} />
+                    Spielstart
+                    <input aria-label={`Spielstart für ${video?.fileName ?? setting.path}`} value={setting.kickoffInput} placeholder="z. B. 02:41" onChange={(event) => updateVideoSetting(setting.path, { kickoffInput: event.target.value })} />
                   </label>
                   <label>
-                    Dauer je Halbzeit
-                    <input aria-label={`Dauer je Halbzeit für ${video?.fileName ?? setting.path}`} value={setting.matchDurationInput} placeholder="45:00" onChange={(event) => updateVideoSetting(setting.path, { matchDurationInput: event.target.value })} />
+                    Länge
+                    <input aria-label={`Länge für ${video?.fileName ?? setting.path}`} value={setting.matchDurationInput} placeholder="45:00" onChange={(event) => updateVideoSetting(setting.path, { matchDurationInput: event.target.value })} />
                   </label>
                   <button className="button button--subtle" type="button" disabled={activeVideoPath !== undefined && activeVideoPath !== setting.path} title={activeVideoPath !== undefined && activeVideoPath !== setting.path ? 'Dafür zuerst dieses Video im Player auswählen' : 'Aktuelle Position des Players übernehmen'} onClick={() => updateVideoSetting(setting.path, { kickoffInput: formatClockTime(getCurrentTime()) })}>Aktuelle Position</button>
                 </div>
               )
             })}
             <span className="segment-editor__autosave-hint">Gültige Änderungen werden sofort übernommen.</span>
-          </section>
-
-          <section className="segment-editor__time-mode" aria-labelledby="segment-time-mode-title">
-            <div>
-              <h3 id="segment-time-mode-title">Zeitformat der Segment-Eingaben</h3>
-              <p>Die Eingaben werden beim Laden und Exportieren automatisch in absolute Zeiten des passenden Videos umgerechnet.</p>
-            </div>
-            <label>
-              Zeitformat
-              <select aria-label="Zeitformat der Segment-Eingaben" value={timeInputMode} onChange={(event) => changeTimeInputMode(event.target.value as PlayerJumpTimeMode)}>
-                {timeInputModes.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
-              </select>
-            </label>
           </section>
 
           <section className="segment-editor__duration-summary" aria-labelledby="segment-duration-summary-title">
@@ -389,7 +333,7 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
             </thead>
             <tbody>
               {drafts.map((draft, index) => {
-                const valid = isDraftValid(draft, effectiveVideos)
+                const valid = isDraftValid(draft, videos)
                 return (
                   <tr key={draft.draftId} className={valid ? '' : 'segment-editor__row--invalid'}>
                     <td className="segment-editor__col-nr">{index + 1}</td>
@@ -399,7 +343,7 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
                           className="segment-editor__select"
                           aria-label={`Video für Segment ${index + 1}`}
                           value={draft.videoPath}
-                          onChange={(e) => updateDraft(draft.draftId, { videoPath: e.target.value, timeInputMode })}
+                          onChange={(e) => updateDraft(draft.draftId, { videoPath: e.target.value })}
                         >
                           {draft.videoPath && !videos.some((v) => v.path === draft.videoPath) && (
                             <option value={draft.videoPath}>{getBaseName(draft.videoPath)}</option>
@@ -416,7 +360,7 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
                           className="segment-editor__input"
                           type="text"
                           value={draft.startTimeInput}
-                          onChange={(e) => updateDraft(draft.draftId, { startTimeInput: e.target.value, timeInputMode })}
+                          onChange={(e) => updateDraft(draft.draftId, { startTimeInput: e.target.value })}
                           placeholder="z.B. 1:30"
                         />
                         <button
@@ -434,7 +378,7 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
                         className="segment-editor__input"
                         type="text"
                         value={draft.endTimeInput}
-                        onChange={(e) => updateDraft(draft.draftId, { endTimeInput: e.target.value, timeInputMode })}
+                        onChange={(e) => updateDraft(draft.draftId, { endTimeInput: e.target.value })}
                         placeholder="z.B. 2:00"
                       />
                     </td>

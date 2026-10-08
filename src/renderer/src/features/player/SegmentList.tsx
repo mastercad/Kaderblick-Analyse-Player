@@ -1,4 +1,4 @@
-import { formatClockTime } from '../../../../common/timeUtils'
+import { formatClockTime, formatSegmentTime } from '../../../../common/timeUtils'
 import type { Segment } from '../../../../common/types'
 
 interface SegmentListProps {
@@ -59,7 +59,7 @@ export function SegmentList({
               <span className="segment-card__index">{String(index + 1).padStart(2, '0')}</span>
               <strong className="segment-card__title">{segment.title || 'Ohne Titel'}</strong>
               <span className="segment-card__time">
-                {formatClockTime(segment.startSeconds)} bis {formatClockTime(segment.endSeconds)}
+                {formatSegmentTime(segment.startSeconds)} bis {formatSegmentTime(segment.endSeconds)}
               </span>
               {segment.subTitle ? <span className="segment-card__subtitle">{segment.subTitle}</span> : null}
             </button>

@@ -52,7 +52,7 @@ describe('SegmentEditor', () => {
   })
 
   describe('column headers', () => {
-    it('shows Startzeit and Ende as column headers', () => {
+    it('shows Startzeit and Ende as segment column headers', () => {
       render(
         <SegmentEditor
           videos={oneVideo}
@@ -68,6 +68,22 @@ describe('SegmentEditor', () => {
   })
 
   describe('video match settings', () => {
+    it('labels each video row with Spielstart and Länge without a per-video suffix', () => {
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      expect(screen.getByRole('textbox', { name: 'Spielstart für vid1.mp4' })).toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: 'Länge für vid1.mp4' })).toBeInTheDocument()
+      expect(screen.queryByText(/pro Video/i)).not.toBeInTheDocument()
+    })
+
     it('saves half and kickoff position immediately without requiring a valid segment', () => {
       const onVideoSettingsChange = vi.fn()
       render(
@@ -82,7 +98,7 @@ describe('SegmentEditor', () => {
       )
 
       fireEvent.change(screen.getByRole('combobox', { name: 'Halbzeit für vid1.mp4' }), { target: { value: '2' } })
-      fireEvent.change(screen.getByRole('textbox', { name: 'Anstoß im Video für vid1.mp4' }), { target: { value: '02:41' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Spielstart für vid1.mp4' }), { target: { value: '02:41' } })
 
       expect(onVideoSettingsChange).toHaveBeenLastCalledWith([
         expect.objectContaining({ matchHalf: 2, kickoffVideoSeconds: 161, matchDurationSeconds: 2700 })
@@ -108,11 +124,11 @@ describe('SegmentEditor', () => {
       )
 
       fireEvent.change(screen.getByRole('textbox', { name: 'Spiel für spiel1-hz1.mp4' }), { target: { value: 'Spiel 1' } })
-      fireEvent.change(screen.getByRole('textbox', { name: 'Dauer je Halbzeit für spiel1-hz1.mp4' }), { target: { value: '35:00' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Länge für spiel1-hz1.mp4' }), { target: { value: '35:00' } })
       fireEvent.change(screen.getByRole('textbox', { name: 'Spiel für spiel1-hz2.mp4' }), { target: { value: 'Spiel 1' } })
       fireEvent.change(screen.getByRole('combobox', { name: 'Halbzeit für spiel1-hz2.mp4' }), { target: { value: '2' } })
       fireEvent.change(screen.getByRole('textbox', { name: 'Spiel für spiel2-hz1.mp4' }), { target: { value: 'Spiel 2' } })
-      fireEvent.change(screen.getByRole('textbox', { name: 'Anstoß im Video für spiel2-hz1.mp4' }), { target: { value: '12:00' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Spielstart für spiel2-hz1.mp4' }), { target: { value: '12:00' } })
 
       expect(onVideoSettingsChange).toHaveBeenLastCalledWith([
         expect.objectContaining({ matchGroupId: 'Spiel 1', matchHalf: 1, matchDurationSeconds: 35 * 60 }),
@@ -123,7 +139,7 @@ describe('SegmentEditor', () => {
   })
 
   describe('loading segments', () => {
-    it('displays segment times in H:MM:SS format', () => {
+    it('displays segment start and end times in minute format', () => {
       render(
         <SegmentEditor
           videos={oneVideo}
@@ -136,6 +152,22 @@ describe('SegmentEditor', () => {
       // startSeconds=90 → "01:30", endSeconds=120 → "02:00"
       expect(screen.getByDisplayValue('01:30')).toBeInTheDocument()
       expect(screen.getByDisplayValue('02:00')).toBeInTheDocument()
+    })
+
+    it('keeps absolute minutes above 60 unchanged instead of converting them to hours', () => {
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          initialSegments={[makeSegment({ startSeconds: 63 * 60 + 30, endSeconds: 64 * 60 + 45, lengthSeconds: 75 })]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      expect(screen.getByDisplayValue('63:30')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('64:45')).toBeInTheDocument()
+      expect(screen.queryByDisplayValue('01:03:30')).not.toBeInTheDocument()
     })
 
     it('displays segments in loaded order, not sorted by time', () => {
@@ -195,6 +227,25 @@ describe('SegmentEditor', () => {
   })
 
   describe('draft persistence', () => {
+    it('recovers a hot-reloaded draft from the briefly used length field without crashing', () => {
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          initialSegments={[]}
+          initialDrafts={[{
+            draftId: 'hot-reload-draft', videoPath: vid1.path, startTimeInput: '10:00', lengthTimeInput: '01:00',
+            title: '', subTitle: '', audioEnabled: true
+          } as unknown as SegmentEditorDraft]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      expect(screen.getByDisplayValue('10:00')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('11:00')).toBeInTheDocument()
+    })
+
     it('reports the latest row values when the editor is closed', async () => {
       const onDraftsChange = vi.fn()
       const onClose = vi.fn()
@@ -428,7 +479,7 @@ describe('SegmentEditor', () => {
       ])
     })
 
-    it('converts cumulative match times in the second half to absolute video times', () => {
+    it('keeps entered times unchanged for a segment assigned to the second video', () => {
       const firstHalf = {
         ...makeVideo('first.mp4'),
         durationSeconds: 55 * 60,
@@ -457,7 +508,6 @@ describe('SegmentEditor', () => {
 
       const [row] = getDataRows()
       fireEvent.change(within(row).getByRole('combobox', { name: 'Video für Segment 1' }), { target: { value: secondHalf.path } })
-      fireEvent.change(screen.getByRole('combobox', { name: 'Zeitformat der Segment-Eingaben' }), { target: { value: 'match-cumulative' } })
       const inputs = getTextInputs(row)
       fireEvent.change(inputs[0], { target: { value: '54:45' } })
       fireEvent.change(inputs[1], { target: { value: '55:45' } })
@@ -466,14 +516,45 @@ describe('SegmentEditor', () => {
       expect(onLoad).toHaveBeenCalledWith([
         expect.objectContaining({
           sourceVideoPath: secondHalf.path,
-          startSeconds: 12 * 60 + 45,
-          endSeconds: 13 * 60 + 45,
+          startSeconds: 54 * 60 + 45,
+          endSeconds: 55 * 60 + 45,
           lengthSeconds: 60
         })
       ])
     })
 
-    it('converts cumulative video times using the durations of preceding files', () => {
+    it('stores minute 65 unchanged on the selected second video', () => {
+      const firstHalf = {
+        ...makeVideo('first.mp4'), durationSeconds: 55 * 60, matchGroupId: 'Spiel 1',
+        matchHalf: 1 as const, kickoffVideoSeconds: 2 * 60, matchDurationSeconds: 45 * 60
+      }
+      const secondHalf = {
+        ...makeVideo('second.mp4'), durationSeconds: 50 * 60, matchGroupId: 'Spiel 1',
+        matchHalf: 2 as const, kickoffVideoSeconds: 3 * 60, matchDurationSeconds: 45 * 60
+      }
+      render(
+        <SegmentEditor
+          videos={[firstHalf, secondHalf]}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      const [row] = getDataRows()
+      fireEvent.change(within(row).getByRole('combobox', { name: 'Video für Segment 1' }), { target: { value: secondHalf.path } })
+      const inputs = getTextInputs(row)
+      fireEvent.change(inputs[0], { target: { value: '65:00' } })
+      fireEvent.change(inputs[1], { target: { value: '66:00' } })
+      fireEvent.click(screen.getByText('Laden'))
+
+      expect(onLoad).toHaveBeenCalledWith([
+        expect.objectContaining({ sourceVideoPath: secondHalf.path, startSeconds: 65 * 60, endSeconds: 66 * 60 })
+      ])
+    })
+
+    it('does not validate fixed segment times against another video or its duration', () => {
       const firstVideo = { ...makeVideo('first.mp4'), durationSeconds: 55 * 60 }
       const secondVideo = { ...makeVideo('second.mp4'), durationSeconds: 50 * 60 }
       render(
@@ -488,7 +569,32 @@ describe('SegmentEditor', () => {
 
       const [row] = getDataRows()
       fireEvent.change(within(row).getByRole('combobox', { name: 'Video für Segment 1' }), { target: { value: secondVideo.path } })
-      fireEvent.change(screen.getByRole('combobox', { name: 'Zeitformat der Segment-Eingaben' }), { target: { value: 'video-cumulative' } })
+      const inputs = getTextInputs(row)
+      fireEvent.change(inputs[0], { target: { value: '20:00' } })
+      fireEvent.change(inputs[1], { target: { value: '21:00' } })
+
+      expect(row.className).not.toContain('invalid')
+      fireEvent.click(screen.getByText('Laden'))
+      expect(onLoad).toHaveBeenCalledWith([
+        expect.objectContaining({ sourceVideoPath: secondVideo.path, startSeconds: 20 * 60, endSeconds: 21 * 60 })
+      ])
+    })
+
+    it('does not subtract durations of preceding videos', () => {
+      const firstVideo = { ...makeVideo('first.mp4'), durationSeconds: 55 * 60 }
+      const secondVideo = { ...makeVideo('second.mp4'), durationSeconds: 50 * 60 }
+      render(
+        <SegmentEditor
+          videos={[firstVideo, secondVideo]}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      const [row] = getDataRows()
+      fireEvent.change(within(row).getByRole('combobox', { name: 'Video für Segment 1' }), { target: { value: secondVideo.path } })
       const inputs = getTextInputs(row)
       fireEvent.change(inputs[0], { target: { value: '60:00' } })
       fireEvent.change(inputs[1], { target: { value: '61:00' } })
@@ -497,14 +603,14 @@ describe('SegmentEditor', () => {
       expect(onLoad).toHaveBeenCalledWith([
         expect.objectContaining({
           sourceVideoPath: secondVideo.path,
-          startSeconds: 5 * 60,
-          endSeconds: 6 * 60,
+          startSeconds: 60 * 60,
+          endSeconds: 61 * 60,
           lengthSeconds: 60
         })
       ])
     })
 
-    it('reformats existing absolute segment times when the input format changes', () => {
+    it('has no time conversion control and displays stored segment times unchanged', () => {
       const secondHalf = {
         ...makeVideo('second.mp4'),
         durationSeconds: 50 * 60,
@@ -529,10 +635,9 @@ describe('SegmentEditor', () => {
         />
       )
 
-      fireEvent.change(screen.getByRole('combobox', { name: 'Zeitformat der Segment-Eingaben' }), { target: { value: 'match-cumulative' } })
-
-      expect(screen.getByDisplayValue('54:45')).toBeInTheDocument()
-      expect(screen.getByDisplayValue('55:45')).toBeInTheDocument()
+      expect(screen.queryByRole('combobox', { name: 'Zeitformat der Segment-Eingaben' })).not.toBeInTheDocument()
+      expect(screen.getByDisplayValue('12:45')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('13:45')).toBeInTheDocument()
     })
   })
 
@@ -557,6 +662,64 @@ describe('SegmentEditor', () => {
       expect(csv).toContain('1.5') // start_minute is decimal
       expect(csv).toContain('30')  // length_seconds = 120-90 = 30
       expect(csv).not.toMatch(/01:30/) // no time format in export
+    })
+
+    it('exports fixed times unchanged with the selected video', async () => {
+      const firstHalf = {
+        ...makeVideo('first.mp4'), durationSeconds: 55 * 60, matchGroupId: 'Spiel 1',
+        matchHalf: 1 as const, kickoffVideoSeconds: 2 * 60, matchDurationSeconds: 45 * 60
+      }
+      const secondHalf = {
+        ...makeVideo('second.mp4'), durationSeconds: 50 * 60, matchGroupId: 'Spiel 1',
+        matchHalf: 2 as const, kickoffVideoSeconds: 3 * 60, matchDurationSeconds: 45 * 60
+      }
+      render(
+        <SegmentEditor
+          videos={[firstHalf, secondHalf]}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      const [row] = getDataRows()
+      fireEvent.change(within(row).getByRole('combobox', { name: 'Video für Segment 1' }), { target: { value: secondHalf.path } })
+      const inputs = getTextInputs(row)
+      fireEvent.change(inputs[0], { target: { value: '65:00' } })
+      fireEvent.change(inputs[1], { target: { value: '66:00' } })
+      fireEvent.click(screen.getByText('CSV exportieren'))
+
+      await waitFor(() => expect(saveCsvFile).toHaveBeenCalled())
+      const csv: string = saveCsvFile.mock.calls[0][0]
+      expect(csv).toContain('/v/second.mp4')
+      expect(csv).toContain(',65,60,')
+      expect(csv).not.toContain('/v/first.mp4')
+    })
+
+    it('does not rewrite segment input fields when video kickoff settings change', () => {
+      render(
+        <SegmentEditor
+          videos={[{ ...vid1, matchHalf: 1, kickoffVideoSeconds: 60, matchDurationSeconds: 45 * 60 }]}
+          initialSegments={[]}
+          initialDrafts={[{
+            draftId: 'segment', videoPath: vid1.path, startTimeInput: '10:00', endTimeInput: '11:00',
+            title: '', subTitle: '', audioEnabled: true
+          }]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      fireEvent.change(screen.getByRole('textbox', { name: 'Spielstart für vid1.mp4' }), { target: { value: '02:00' } })
+
+      expect(screen.getByDisplayValue('10:00')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('11:00')).toBeInTheDocument()
+      fireEvent.click(screen.getByText('Laden'))
+      expect(onLoad).toHaveBeenCalledWith([
+        expect.objectContaining({ sourceVideoPath: vid1.path, startSeconds: 10 * 60, endSeconds: 11 * 60 })
+      ])
     })
   })
 

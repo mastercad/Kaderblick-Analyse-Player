@@ -3,8 +3,9 @@ import { defaultAppInfo } from '../../../common/appInfo'
 import { buildAppSettingsExport } from '../../../common/appSettings'
 import { builtInFilterPresets, defaultFilterSettings } from '../../../common/filterPresets'
 import { areFilterSettingsEqual, mergeCustomPresets, sanitizeFilterSettings } from '../../../common/filterUtils'
-import { matchSegmentsToVideo, matchSegmentsToVideos, parseSegmentsCsv, interpolateSegmentTitles } from '../../../common/segmentUtils'
+import { matchSegmentsToLoadedVideo, matchSegmentsToLoadedVideos, parseSegmentsCsv, interpolateSegmentTitles } from '../../../common/segmentUtils'
 import { formatClockTime } from '../../../common/timeUtils'
+import { resolveSegmentForPlayback } from '../../../common/matchTimeUtils'
 import type { AppInfo, AppSettingsExport, CsvFileDescriptor, FilterPreset, FilterSettings, PlayerJumpTimeMode, Segment, SegmentEditorDraft, SessionSnapshot, VideoFileDescriptor, VideoPreparationProgress } from '../../../common/types'
 import { AboutDialog } from '../features/app/AboutDialog'
 import { SessionRestoreDialog } from '../features/app/SessionRestoreDialog'
@@ -167,10 +168,18 @@ export function App() {
 
   const selectedVideo = videoLibrary[activeVideoIndex]
   const presets = [...builtInFilterPresets, ...customPresets]
-  const matchedSegments = selectedVideo ? matchSegmentsToVideo(allSegments, selectedVideo.fileName) : []
-  // Interpolated segments: empty titles filled from last non-empty title — for interstitial display only
-  const displaySegments = interpolateSegmentTitles(matchedSegments)
-  const matchedSegmentsAllVideos = videoLibrary.length > 0 ? matchSegmentsToVideos(allSegments, videoLibrary.map((v) => v.fileName)) : []
+  const matchedSegments = selectedVideo ? matchSegmentsToLoadedVideo(allSegments, selectedVideo, videoLibrary) : []
+  const resolvedSegmentPairs = selectedVideo
+    ? matchedSegments.flatMap((segment) => {
+        const resolved = resolveSegmentForPlayback(segment, playerJumpTimeMode, videoLibrary, selectedVideo)
+        return resolved ? [{ stored: segment, playback: resolved }] : []
+      })
+    : []
+  // Playback uses physical video positions. Visible segment labels always use
+  // the fixed values stored by CSV/editor, in the same order.
+  const playbackSegments = interpolateSegmentTitles(resolvedSegmentPairs.map(({ playback }) => playback))
+  const segmentDisplayTimes = interpolateSegmentTitles(resolvedSegmentPairs.map(({ stored }) => stored))
+  const matchedSegmentsAllVideos = videoLibrary.length > 0 ? matchSegmentsToLoadedVideos(allSegments, videoLibrary) : []
   const selectedPreset = presets.find((preset) => preset.id === selectedPresetId) ?? builtInFilterPresets[0]
   const showStartScreen = videoLibrary.length === 0 && !selectedCsv
   const isPresetDirty = !areFilterSettingsEqual(selectedPreset.settings, filterSettings)
@@ -343,7 +352,7 @@ export function App() {
     const wasPlaying = isPlayingRef.current
     setAutoPlayRecoveredVideo(wasPlaying)
     const nextVideo = videoLibrary[index]
-    const hasSegments = allSegments.length > 0 && matchSegmentsToVideo(allSegments, nextVideo.fileName).length > 0
+    const hasSegments = allSegments.length > 0 && matchSegmentsToLoadedVideo(allSegments, nextVideo, videoLibrary).length > 0
     setAutoStartSegmentsOnLoad(isSegmentModeRef.current && hasSegments)
     setAutoStartSegmentsFromEnd(false)
     setActiveVideoIndex(index)
@@ -371,7 +380,7 @@ export function App() {
     }
 
     const nextVideo = videoLibrary[nextIndex]
-    const nextHasSegments = allSegments.length > 0 && matchSegmentsToVideo(allSegments, nextVideo.fileName).length > 0
+    const nextHasSegments = allSegments.length > 0 && matchSegmentsToLoadedVideo(allSegments, nextVideo, videoLibrary).length > 0
     setActiveVideoIndex(nextIndex)
     setAutoPlayRecoveredVideo(isPlayingRef.current)
     setAutoStartSegmentsOnLoad(nextHasSegments)
@@ -389,7 +398,7 @@ export function App() {
     }
 
     const prevVideo = videoLibrary[prevIndex]
-    const prevHasSegments = allSegments.length > 0 && matchSegmentsToVideo(allSegments, prevVideo.fileName).length > 0
+    const prevHasSegments = allSegments.length > 0 && matchSegmentsToLoadedVideo(allSegments, prevVideo, videoLibrary).length > 0
     setActiveVideoIndex(prevIndex)
     setAutoPlayRecoveredVideo(isPlayingRef.current)
     setAutoStartSegmentsOnLoad(prevHasSegments)
@@ -421,7 +430,7 @@ export function App() {
       setAllSegments(parsedSegments)
       setSegmentEditorDrafts(undefined)
 
-      const segmentCount = videoLibrary.length > 0 ? matchSegmentsToVideos(parsedSegments, videoLibrary.map((v) => v.fileName)).length : 0
+      const segmentCount = videoLibrary.length > 0 ? matchSegmentsToLoadedVideos(parsedSegments, videoLibrary).length : 0
       setStatusMessage(`${csvFile.fileName} geladen. ${parsedSegments.length} Segmente importiert, ${segmentCount} davon passen zu den geladenen Videos.`)
     } catch {
       setStatusMessage('Die CSV-Datei konnte nicht gelesen werden. Bitte Format und Spaltennamen prüfen.')
@@ -763,7 +772,8 @@ export function App() {
                 selectedVideo={selectedVideo}
                 matchVideos={videoLibrary}
                 jumpTimeMode={playerJumpTimeMode}
-                segments={displaySegments}
+                segments={playbackSegments}
+                segmentDisplayTimes={segmentDisplayTimes}
                 isSegmentEditorOpen={segmentEditorOpen}
                 onOpenSegmentEditor={() => setSegmentEditorOpen((prev) => !prev)}
                 onCurrentTimeChange={(t) => { videoCurrentTimeRef.current = t }}
@@ -861,8 +871,8 @@ export function App() {
                         onDraftsChange={setSegmentEditorDrafts}
                         onVideoSettingsChange={(updatedVideos) => setVideoLibrary(updatedVideos)}
                         onLoad={(editedSegments) => {
-                          const loadedPaths = new Set(videoLibrary.map((v) => v.path))
-                          const preserved = allSegments.filter((s) => !loadedPaths.has(s.sourceVideoPath))
+                          const editableSegments = new Set(matchSegmentsToLoadedVideos(allSegments, videoLibrary))
+                          const preserved = allSegments.filter((segment) => !editableSegments.has(segment))
                           setAllSegments([...preserved, ...editedSegments])
                           setSegmentEditorOpen(false)
                         }}

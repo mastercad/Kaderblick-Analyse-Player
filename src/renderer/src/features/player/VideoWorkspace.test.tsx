@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { defaultFilterSettings } from '../../../../common/filterPresets'
+import type { Segment } from '../../../../common/types'
 import { VideoWorkspace } from './VideoWorkspace'
 
 const selectedVideo = {
@@ -10,6 +11,40 @@ const selectedVideo = {
 }
 
 describe('VideoWorkspace', () => {
+  it.each([
+    { storedStart: 54 * 60 + 45, storedEnd: 56 * 60, expected: '54:45 bis 56:00' },
+    { storedStart: 73 * 60 + 17, storedEnd: 74 * 60 + 32, expected: '73:17 bis 74:32' }
+  ])('shows the segment\'s own stored times ($expected) while playback uses resolved video positions', ({ storedStart, storedEnd, expected }) => {
+    const playbackSegment: Segment = {
+      id: 'second-half', sourceVideoName: 'test-video.mp4', sourceVideoPath: selectedVideo.path,
+      startSeconds: 11 * 60 + 15, endSeconds: 12 * 60 + 30, lengthSeconds: 75,
+      title: 'Szene', subTitle: '', audioTrack: '1'
+    }
+    const storedSegment = {
+      ...playbackSegment,
+      startSeconds: storedStart,
+      endSeconds: storedEnd
+    }
+
+    render(
+      <VideoWorkspace
+        selectedVideo={selectedVideo}
+        segments={[playbackSegment]}
+        segmentDisplayTimes={[storedSegment]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+      >
+        <div>Overlay-Inhalt</div>
+      </VideoWorkspace>
+    )
+
+    expect(screen.getByText(expected)).toBeInTheDocument()
+    expect(screen.queryByText('11:15 bis 12:30')).not.toBeInTheDocument()
+  })
+
   it('renders overlay dialogs inside the player panel', () => {
     render(
       <VideoWorkspace

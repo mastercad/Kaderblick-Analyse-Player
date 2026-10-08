@@ -24,7 +24,6 @@ export interface SegmentEditorDraft {
   videoPath: string
   startTimeInput: string
   endTimeInput: string
-  timeInputMode?: PlayerJumpTimeMode
   title: string
   subTitle: string
   audioEnabled: boolean

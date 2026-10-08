@@ -17,6 +17,7 @@ Desktop-Anwendung für die Fußball-Videoanalyse – CSV-basierte Szenennavigati
 | **Live-Filter** | Helligkeit, Kontrast, Sättigung, Weichzeichner – in Echtzeit während der Wiedergabe |
 | **Presets** | Filtereinstellungen speichern, laden, importieren und exportieren |
 | **Session-Wiederherstellung** | Geladene Videos, CSV und Einstellungen als JSON exportieren und später wieder laden |
+| **Automatische Updates** | Aktualisiert installierte und portable Builds im Hintergrund; Offline-Betrieb und Wiedergabe werden nicht blockiert |
 | **Tastatursteuerung** | Vollständige Bedienung ohne Maus |
 
 ---

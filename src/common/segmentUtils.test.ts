@@ -4,6 +4,7 @@ import {
   getNextSegmentIndex,
   getPreviousSegmentIndex,
   interpolateSegmentTitles,
+  matchSegmentsToLoadedVideo,
   matchSegmentsToVideo,
   parseSegmentsCsv,
   parseTimeInput,
@@ -48,6 +49,24 @@ describe('segmentUtils', () => {
     const matching = matchSegmentsToVideo(segments, 'Testspiel.mp4')
 
     expect(matching).toHaveLength(2)
+  })
+
+  it('keeps segments separated when loaded videos have the same filename', () => {
+    const segments = parseSegmentsCsv(`videoname,start_minute,length_seconds,title,sub_title,audio
+/team-a/match.mp4,1,10,Team A,,1
+/team-b/match.mp4,2,10,Team B,,1`)
+    const videoA = { path: '/team-a/match.mp4', fileName: 'match.mp4', fileUrl: 'file:///team-a/match.mp4', playbackMode: 'direct' as const }
+    const videoB = { path: '/team-b/match.mp4', fileName: 'match.mp4', fileUrl: 'file:///team-b/match.mp4', playbackMode: 'direct' as const }
+
+    expect(matchSegmentsToLoadedVideo(segments, videoA, [videoA, videoB]).map((segment) => segment.title)).toEqual(['Team A'])
+    expect(matchSegmentsToLoadedVideo(segments, videoB, [videoA, videoB]).map((segment) => segment.title)).toEqual(['Team B'])
+  })
+
+  it('falls back to a CSV filename after a uniquely named video was moved', () => {
+    const segments = parseSegmentsCsv(csv)
+    const movedVideo = { path: '/new/Testspiel.mp4', fileName: 'Testspiel.mp4', fileUrl: 'file:///new/Testspiel.mp4', playbackMode: 'direct' as const }
+
+    expect(matchSegmentsToLoadedVideo(segments, movedVideo, [movedVideo])).toHaveLength(2)
   })
 
   it('finds previous, next and active segments', () => {

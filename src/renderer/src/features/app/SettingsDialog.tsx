@@ -28,7 +28,7 @@ export function SettingsDialog({ open, jumpTimeMode, onJumpTimeModeChange, onClo
           </div>
           <button aria-label="Schließen" className="icon-button" type="button" onClick={onClose}>✕</button>
         </div>
-        <p className="settings-dialog__intro">Wie soll eine spontan eingegebene Sprungzeit interpretiert werden? CSV- und Segmentzeiten bleiben immer direkte Videozeiten.</p>
+        <p className="settings-dialog__intro">Wie sollen Sprungzeiten und die unverändert gespeicherten Segmentzeiten bei der Wiedergabe interpretiert werden?</p>
         <fieldset className="settings-dialog__options">
           <legend>Zeitformat für Sprungziele</legend>
           {jumpTimeModes.map((mode) => (

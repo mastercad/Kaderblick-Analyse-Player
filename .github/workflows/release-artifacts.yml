@@ -41,6 +41,7 @@ jobs:
           path: |
             release/*.AppImage
             release/*.deb
+            release/latest-linux.yml
           if-no-files-found: error
 
   build_windows:
@@ -67,6 +68,19 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      - name: Update-Manifest fuer portable Version erzeugen
+        shell: pwsh
+        run: |
+          $portable = Get-ChildItem 'release/*-portable-*.exe' | Select-Object -First 1
+          if (-not $portable) { throw 'Portable Windows artefact not found' }
+          $package = Get-Content 'package.json' -Raw | ConvertFrom-Json
+          $manifest = @{
+            version = $package.version
+            file = $portable.Name
+            sha512 = (Get-FileHash -LiteralPath $portable.FullName -Algorithm SHA512).Hash.ToLowerInvariant()
+          }
+          $manifest | ConvertTo-Json | Set-Content 'release/portable-update.json' -Encoding utf8
+
       - name: Windows Artefakte hochladen
         uses: actions/upload-artifact@v4
         with:
@@ -74,6 +88,9 @@ jobs:
           path: |
             release/*-setup-*.exe
             release/*-portable-*.exe
+            release/latest.yml
+            release/portable-update.json
+            release/*.blockmap
           if-no-files-found: error
 
   build_macos:
@@ -107,6 +124,8 @@ jobs:
           path: |
             release/*.dmg
             release/*.zip
+            release/latest-mac.yml
+            release/*.blockmap
           if-no-files-found: error
 
   attach_assets:
@@ -146,3 +165,6 @@ jobs:
             dist-artifacts/**/*.exe
             dist-artifacts/**/*.dmg
             dist-artifacts/**/*.zip
+            dist-artifacts/**/*.yml
+            dist-artifacts/**/portable-update.json
+            dist-artifacts/**/*.blockmap

@@ -3829,6 +3829,12 @@ kbd {
   padding: 9px 12px 8px;
 }
 
+/* The timeline preview opens above the bottom controls and must be allowed to
+   extend over the fullscreen video instead of being clipped by the card. */
+.fullscreen-flyout-panel--bottom .fullscreen-card--stacked {
+  overflow: visible;
+}
+
 .fullscreen-flyout-panel--bottom .timeline {
   height: 19px;
 }

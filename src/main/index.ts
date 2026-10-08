@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, ipcMain, protocol, session } from 'electron'
+import { app, BrowserWindow, ipcMain, Notification, protocol, session } from 'electron'
 import { defaultAppInfo } from '../common/appInfo'
 import { KVIDEO_SCHEME } from '../common/streaming'
 import type { AppSettingsExport, FilterPreset } from '../common/types'
@@ -11,8 +11,23 @@ import { initStreamingProtocol, registerStreamingProtocol } from './streamingPro
 import { ffmpegExecutable, getKeyframeTimes, prepareStreamingPlayback } from './videoPlayback'
 import { addYouTubeClientReferer, YOUTUBE_EMBED_URLS } from './youtubeRequestIdentity'
 import { terminateAllChildProcesses } from './childProcessRegistry'
+import { startAutomaticUpdates } from './autoUpdate'
+import { startPortableAutomaticUpdates } from './portableUpdate'
+import { disabledLinuxChromiumFeatures, shouldDisableAcceleratedVideoDecode } from './linuxChromiumFeatures'
 import { cleanupTimelinePreviewCache, getTimelinePreviewCacheState, getTimelinePreviewFileInfo, getTimelinePreviewFrame, markTimelinePreviewPhaseComplete, readTimelinePreviewRange, storeTimelinePreviewSheet } from './timelinePreviewStorage'
+import electronUpdater from 'electron-updater'
 
+const hasNvidiaDriver = existsSync('/proc/driver/nvidia/version')
+const disabledChromiumFeatures = disabledLinuxChromiumFeatures(
+  process.platform,
+  process.env.XDG_SESSION_TYPE
+)
+if (disabledChromiumFeatures.length > 0) {
+  app.commandLine.appendSwitch('disable-features', disabledChromiumFeatures.join(','))
+}
+if (shouldDisableAcceleratedVideoDecode(process.platform, hasNvidiaDriver)) {
+  app.commandLine.appendSwitch('disable-accelerated-video-decode')
+}
 
 protocol.registerSchemesAsPrivileged([{
   scheme: KVIDEO_SCHEME,
@@ -125,6 +140,26 @@ app.whenReady().then(() => {
   ipcMain.handle('fs:fileExists', (_, filePath: string) => existsSync(filePath))
 
   createWindow()
+  const portableExecutablePath = process.env.PORTABLE_EXECUTABLE_FILE
+  if (app.isPackaged && process.platform === 'win32' && portableExecutablePath) {
+    const portableUpdater = startPortableAutomaticUpdates({
+      currentVersion: app.getVersion(),
+      executablePath: portableExecutablePath,
+      temporaryDirectory: app.getPath('temp'),
+      fetch: globalThis.fetch,
+      notifyReady: (version) => {
+        if (!Notification.isSupported()) return
+        new Notification({
+          title: 'Kaderblick-Update heruntergeladen',
+          body: `Version ${version} wird beim Beenden installiert.`
+        }).show()
+      }
+    })
+    app.on('before-quit', portableUpdater.installOnExit)
+  } else {
+    const { autoUpdater } = electronUpdater
+    startAutomaticUpdates(autoUpdater, app.isPackaged ? 'install' : 'disabled')
+  }
   void cleanupTimelinePreviewCache()
 
   app.on('activate', () => {

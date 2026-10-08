@@ -111,7 +111,7 @@ Unter `Einstellungen` im Menü oben rechts legt ihr fest, wie eine im Player ein
 - `Spielzeit – je Halbzeit/Teil`: die Zeit beginnt je Halbzeit oder Teil wieder bei null
 - `Spielzeit – fortlaufend`: die Spieluhr läuft über alle Halbzeiten oder Teile weiter
 
-Der gewählte Modus betrifft ausschließlich das Sprungfeld im Player. CSV- und Segmentzeiten bleiben immer direkte Positionen im jeweiligen Video.
+Segmentzeiten werden im Editor und in der CSV unverändert gespeichert. Der gewählte Modus bestimmt erst bei der Wiedergabe, wie Sprung- und Segmentzeiten auf die Position im zugeordneten Video abgebildet werden.
 
 ## Über die App
 

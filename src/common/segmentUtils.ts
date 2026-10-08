@@ -1,5 +1,5 @@
 import Papa from 'papaparse'
-import type { Segment, SegmentCsvRow } from './types'
+import type { Segment, SegmentCsvRow, VideoFileDescriptor } from './types'
 
 const sanitizeText = (value: unknown): string => {
   return typeof value === 'string' ? value.trim() : ''
@@ -110,6 +110,35 @@ export const parseSegmentsCsv = (csvText: string): Segment[] => {
 export const matchSegmentsToVideo = (segments: Segment[], videoFileName: string): Segment[] => {
   const target = videoFileName.trim().toLowerCase()
   return segments.filter((segment) => segment.sourceVideoName.toLowerCase() === target)
+}
+
+export const findLoadedVideoForSegment = (
+  segment: Segment,
+  loadedVideos: VideoFileDescriptor[]
+): VideoFileDescriptor | null => {
+  const exactPathMatch = loadedVideos.find((video) => video.path === segment.sourceVideoPath)
+  if (exactPathMatch) return exactPathMatch
+
+  const targetName = segment.sourceVideoName.trim().toLowerCase()
+  const filenameMatches = loadedVideos.filter(
+    (video) => video.fileName.trim().toLowerCase() === targetName
+  )
+  return filenameMatches.length === 1 ? filenameMatches[0] : null
+}
+
+export const matchSegmentsToLoadedVideo = (
+  segments: Segment[],
+  video: VideoFileDescriptor,
+  loadedVideos: VideoFileDescriptor[]
+): Segment[] => {
+  return segments.filter((segment) => findLoadedVideoForSegment(segment, loadedVideos)?.path === video.path)
+}
+
+export const matchSegmentsToLoadedVideos = (
+  segments: Segment[],
+  loadedVideos: VideoFileDescriptor[]
+): Segment[] => {
+  return segments.filter((segment) => findLoadedVideoForSegment(segment, loadedVideos) !== null)
 }
 
 export const matchSegmentsToVideos = (segments: Segment[], videoFileNames: string[]): Segment[] => {
