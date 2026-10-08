@@ -26,6 +26,13 @@
 
 * **player:** add match-aware seeking and timeline previews ([4b702e5](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/4b702e5c922694634d9d0b4cdbcb7459607eb737))
 
+## [2.9.1](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.9.0...v2.9.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **deps:** resolve all dependabot alerts ([9270920](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/927092041716f676ee61ac77afb40e646b358357))
+
 ## [2.5.3](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.5.2...v2.5.3) (2026-09-23)
 
 ## [2.5.2](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.5.1...v2.5.2) (2026-09-23)
