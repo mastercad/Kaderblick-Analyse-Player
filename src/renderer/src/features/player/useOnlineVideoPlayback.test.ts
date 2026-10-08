@@ -23,7 +23,7 @@ const mockYtPlayer = {
   destroy: vi.fn()
 }
 
-const MockYTPlayer = vi.fn().mockImplementation((_container, options) => {
+const MockYTPlayer = vi.fn().mockImplementation(function (_container, options) {
   ytReadyCallback = options.events?.onReady
   ytStateChangeCallback = options.events?.onStateChange
   ytErrorCallback = options.events?.onError
@@ -53,7 +53,7 @@ beforeAll(() => {
 beforeEach(() => {
   vi.clearAllMocks()
   // Re-apply MockYTPlayer implementation after clearAllMocks
-  MockYTPlayer.mockImplementation((_container, options) => {
+  MockYTPlayer.mockImplementation(function (_container, options) {
     ytReadyCallback = options.events?.onReady
     ytStateChangeCallback = options.events?.onStateChange
     ytErrorCallback = options.events?.onError

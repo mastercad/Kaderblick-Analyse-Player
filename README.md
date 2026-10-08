@@ -85,15 +85,9 @@ Die Ausgabe landet im Verzeichnis `release/`. Jeder Paketname enthält die aktue
 Version aus `package.json`, zum Beispiel
 `kaderblick-analyse-player-2.5.1-linux-x86_64.AppImage`.
 
-Releases werden über [semantic-release](https://semantic-release.gitbook.io/) automatisiert:
-
-```bash
-# Dry-Run (kein tatsächlicher Release)
-npm run release:dry-run
-
-# Release veröffentlichen
-npm run release
-```
+Releases werden über [Release Please](https://github.com/googleapis/release-please-action)
+automatisiert. Conventional-Commit-Nachrichten werden in einem Release-PR gesammelt;
+nach dessen Merge werden GitHub Release, Tag und Plattform-Artefakte erzeugt.
 
 Commit-Nachrichten müssen dem [Conventional Commits](https://www.conventionalcommits.org/)-Standard folgen.
 
@@ -118,13 +112,13 @@ release/        # Build-Ausgabe (wird generiert)
 
 | Schicht | Technologie |
 |---|---|
-| Desktop-Framework | Electron 37 |
+| Desktop-Framework | Electron 41 |
 | Frontend | React 19, TypeScript 5 |
 | Build | electron-vite, Vite 7 |
 | Medienverarbeitung | Native Chromium-Wiedergabe, WebCodecs/MP4Box für Timeline-Vorschaubilder, FFmpeg/FFprobe für Format-Fallbacks |
 | CSV-Parsing | PapaParse |
-| Tests | Vitest 3, @testing-library/react |
-| Release | semantic-release |
+| Tests | Vitest 4, @testing-library/react |
+| Release | Release Please |
 
 ---
 

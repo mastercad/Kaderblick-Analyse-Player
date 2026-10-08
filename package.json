@@ -2,6 +2,7 @@
   "name": "kaderblick-analyse-player",
   "version": "2.9.0",
   "description": "Desktop player for football video analysis with CSV segments, live filters and team-friendly controls.",
+  "desktopName": "de.fussballverein.video-player",
   "main": "out/main/index.js",
   "author": {
     "name": "Andreas Kempe",
@@ -15,6 +16,10 @@
   "homepage": "https://github.com/mastercad/Kaderblick-Analyse-Player",
   "license": "UNLICENSED",
   "type": "module",
+  "engines": {
+    "node": ">=24.21.0",
+    "npm": ">=11.19.0"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "npm run build:clean-unpacked && tsc --noEmit && electron-vite build && electron-builder --publish never",
@@ -23,19 +28,19 @@
     "preview": "electron-vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit",
-    "release": "semantic-release",
-    "release:dry-run": "semantic-release --dry-run"
+    "lint": "tsc --noEmit"
   },
   "build": {
     "appId": "de.fussballverein.video-player",
     "productName": "Kaderblick Analyse Player",
     "artifactName": "kaderblick-analyse-player-${version}-${os}-${arch}.${ext}",
     "executableName": "kaderblick-analyse-player",
-    "asarUnpack": [
-      "node_modules/ffmpeg-static/**/*",
-      "node_modules/ffprobe-static/**/*"
-    ],
+    "asar": {
+      "unpack": [
+        "node_modules/ffmpeg-static/**/*",
+        "node_modules/ffprobe-static/**/*"
+      ]
+    },
     "files": [
       "out/**/*",
       "package.json"
@@ -75,7 +80,9 @@
         "zip"
       ],
       "icon": "assets/kaderblick_player_appicon.icns",
-      "identity": null
+      "sign": {
+        "identity": null
+      }
     },
     "win": {
       "target": [
@@ -101,7 +108,7 @@
     }
   },
   "dependencies": {
-    "electron-updater": "^6.8.9",
+    "electron-updater": "^6.8.10",
     "ffmpeg-static": "^5.3.0",
     "ffprobe-static": "^3.1.0",
     "mp4box": "^2.4.1",
@@ -112,12 +119,6 @@
   "devDependencies": {
     "@commitlint/cli": "^20.1.0",
     "@commitlint/config-conventional": "^20.0.0",
-    "@semantic-release/changelog": "^6.0.3",
-    "@semantic-release/commit-analyzer": "^13.0.1",
-    "@semantic-release/git": "^10.0.1",
-    "@semantic-release/github": "^11.0.6",
-    "@semantic-release/npm": "^12.0.2",
-    "@semantic-release/release-notes-generator": "^14.1.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^24.6.1",
@@ -125,13 +126,21 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.0.4",
-    "electron": "^41.4.0",
-    "electron-builder": "^26.0.12",
+    "electron": "^41.10.7",
+    "electron-builder": "27.0.0-alpha.10",
     "electron-vite": "^4.0.0",
     "happy-dom": "^20.9.0",
-    "semantic-release": "^24.2.9",
     "typescript": "^5.9.3",
-    "vite": "^7.1.10",
-    "vitest": "^3.2.4"
+    "vite": "^7.3.7",
+    "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "lodash.isequal": "npm:@lodash-modularized/isequal@^1.0.1"
+  },
+  "allowScripts": {
+    "electron@41.10.7": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "ffmpeg-static@5.3.0": true
   }
 }
