@@ -137,23 +137,15 @@ jobs:
       - build_macos
 
     steps:
-      - name: Linux Artefakte herunterladen
-        uses: actions/download-artifact@v8
-        with:
-          name: linux-release-${{ inputs.tag }}
-          path: dist-artifacts/linux
-
-      - name: Windows Artefakte herunterladen
-        uses: actions/download-artifact@v8
-        with:
-          name: windows-release-${{ inputs.tag }}
-          path: dist-artifacts/windows
-
-      - name: macOS Artefakte herunterladen
-        uses: actions/download-artifact@v8
-        with:
-          name: macos-release-${{ inputs.tag }}
-          path: dist-artifacts/macos
+      - name: Plattform-Artefakte herunterladen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "linux-release-${RELEASE_TAG}" --dir dist-artifacts/linux
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "windows-release-${RELEASE_TAG}" --dir dist-artifacts/windows
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "macos-release-${RELEASE_TAG}" --dir dist-artifacts/macos
 
       - name: Lokale Release-Dateien vollständig prüfen
         env:
@@ -216,7 +208,7 @@ jobs:
           declare -A uploaded_assets=()
           while IFS= read -r asset; do
             uploaded_assets["$asset"]=1
-          done < <(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')
+          done < <(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
 
           expected_assets=(
             "kaderblick-analyse-player-${version}-linux-x86_64.AppImage"
@@ -241,4 +233,4 @@ jobs:
             fi
           done
 
-          gh release edit "$RELEASE_TAG" --draft=false --latest
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
