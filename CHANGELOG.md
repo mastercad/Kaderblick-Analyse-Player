@@ -1,3 +1,10 @@
+# [2.9.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.8.0...v2.9.0) (2026-10-08)
+
+
+### Features
+
+* centralize segment timing and add auto-updates ([2bcb8fd](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/2bcb8fdb486f81cb84a627034f57492a9c609200))
+
 # [2.8.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.7.0...v2.8.0) (2026-10-06)
 
 
