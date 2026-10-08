@@ -26,6 +26,14 @@
 
 * **player:** add match-aware seeking and timeline previews ([4b702e5](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/4b702e5c922694634d9d0b4cdbcb7459607eb737))
 
+## [2.9.2](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.9.1...v2.9.2) (2026-10-08)
+
+
+### Bug Fixes
+
+* **release:** preserve version tag format ([58f7841](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/58f7841b848d901bcb60e33e64a1e920693073f1))
+* **release:** publish only after all assets exist ([abb4453](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/abb44533c8c628aca1ae9bd889254ed351c046cc))
+
 ## [2.9.1](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.9.0...v2.9.1) (2026-10-08)
 
 
