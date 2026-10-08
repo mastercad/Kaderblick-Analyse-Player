@@ -87,7 +87,9 @@ Version aus `package.json`, zum Beispiel
 
 Releases werden über [Release Please](https://github.com/googleapis/release-please-action)
 automatisiert. Conventional-Commit-Nachrichten werden in einem Release-PR gesammelt;
-nach dessen Merge werden GitHub Release, Tag und Plattform-Artefakte erzeugt.
+nach dessen Merge wird zunächst ein nichtöffentlicher Draft erzeugt. Erst wenn die
+Windows-, Linux- und macOS-Artefakte vollständig gebaut, geprüft und angehängt sind,
+wird das GitHub Release veröffentlicht.
 
 Commit-Nachrichten müssen dem [Conventional Commits](https://www.conventionalcommits.org/)-Standard folgen.
 

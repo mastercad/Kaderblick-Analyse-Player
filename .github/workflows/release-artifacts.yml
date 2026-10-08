@@ -18,12 +18,12 @@ jobs:
 
     steps:
       - name: Repository am Release-Tag auschecken
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
 
       - name: Node.js einrichten
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -35,7 +35,7 @@ jobs:
         run: npm run build
 
       - name: Linux Artefakte hochladen
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-release-${{ inputs.tag }}
           path: |
@@ -50,12 +50,12 @@ jobs:
 
     steps:
       - name: Repository am Release-Tag auschecken
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
 
       - name: Node.js einrichten
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -82,7 +82,7 @@ jobs:
           $manifest | ConvertTo-Json | Set-Content 'release/portable-update.json' -Encoding utf8
 
       - name: Windows Artefakte hochladen
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-release-${{ inputs.tag }}
           path: |
@@ -99,12 +99,12 @@ jobs:
 
     steps:
       - name: Repository am Release-Tag auschecken
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
 
       - name: Node.js einrichten
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -118,7 +118,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: macOS Artefakte hochladen
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-release-${{ inputs.tag }}
           path: |
@@ -138,27 +138,28 @@ jobs:
 
     steps:
       - name: Linux Artefakte herunterladen
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: linux-release-${{ inputs.tag }}
           path: dist-artifacts/linux
 
       - name: Windows Artefakte herunterladen
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: windows-release-${{ inputs.tag }}
           path: dist-artifacts/windows
 
       - name: macOS Artefakte herunterladen
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: macos-release-${{ inputs.tag }}
           path: dist-artifacts/macos
 
       - name: Release-Dateien hochladen
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.tag }}
+          draft: true
           files: |
             dist-artifacts/**/*.AppImage
             dist-artifacts/**/*.deb
@@ -168,3 +169,40 @@ jobs:
             dist-artifacts/**/*.yml
             dist-artifacts/**/portable-update.json
             dist-artifacts/**/*.blockmap
+
+      - name: Vollstaendigen Release pruefen und veroeffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          version="${RELEASE_TAG#v}"
+          declare -A uploaded_assets=()
+          while IFS= read -r asset; do
+            uploaded_assets["$asset"]=1
+          done < <(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')
+
+          expected_assets=(
+            "kaderblick-analyse-player-${version}-linux-x86_64.AppImage"
+            "kaderblick-analyse-player-${version}-linux-amd64.deb"
+            "kaderblick-analyse-player-setup-${version}-x64.exe"
+            "kaderblick-analyse-player-setup-${version}-x64.exe.blockmap"
+            "kaderblick-analyse-player-portable-${version}-x64.exe"
+            "kaderblick-analyse-player-${version}-mac-arm64.dmg"
+            "kaderblick-analyse-player-${version}-mac-arm64.dmg.blockmap"
+            "kaderblick-analyse-player-${version}-mac-arm64.zip"
+            "kaderblick-analyse-player-${version}-mac-arm64.zip.blockmap"
+            "latest-linux.yml"
+            "latest.yml"
+            "latest-mac.yml"
+            "portable-update.json"
+          )
+
+          for expected_asset in "${expected_assets[@]}"; do
+            if [[ -z "${uploaded_assets[$expected_asset]+present}" ]]; then
+              echo "Fehlendes Release-Artefakt: $expected_asset" >&2
+              exit 1
+            fi
+          done
+
+          gh release edit "$RELEASE_TAG" --draft=false --latest
