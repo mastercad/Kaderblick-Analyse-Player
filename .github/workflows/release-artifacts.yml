@@ -129,7 +129,7 @@ jobs:
           if-no-files-found: error
 
   attach_assets:
-    name: Artefakte ans Release haengen
+    name: Artefakte prüfen und Release veröffentlichen
     runs-on: ubuntu-latest
     needs:
       - build_linux
@@ -155,10 +155,46 @@ jobs:
           name: macos-release-${{ inputs.tag }}
           path: dist-artifacts/macos
 
-      - name: Release-Dateien hochladen
+      - name: Lokale Release-Dateien vollständig prüfen
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          version="${RELEASE_TAG#v}"
+          declare -A built_assets=()
+          while IFS= read -r asset; do
+            built_assets["$asset"]=1
+          done < <(find dist-artifacts -type f -printf '%f\n')
+
+          expected_assets=(
+            "kaderblick-analyse-player-${version}-linux-x86_64.AppImage"
+            "kaderblick-analyse-player-${version}-linux-amd64.deb"
+            "kaderblick-analyse-player-setup-${version}-x64.exe"
+            "kaderblick-analyse-player-setup-${version}-x64.exe.blockmap"
+            "kaderblick-analyse-player-portable-${version}-x64.exe"
+            "kaderblick-analyse-player-${version}-mac-arm64.dmg"
+            "kaderblick-analyse-player-${version}-mac-arm64.dmg.blockmap"
+            "kaderblick-analyse-player-${version}-mac-arm64.zip"
+            "kaderblick-analyse-player-${version}-mac-arm64.zip.blockmap"
+            "latest-linux.yml"
+            "latest.yml"
+            "latest-mac.yml"
+            "portable-update.json"
+          )
+
+          for expected_asset in "${expected_assets[@]}"; do
+            if [[ -z "${built_assets[$expected_asset]+present}" ]]; then
+              echo "Fehlendes Release-Artefakt: $expected_asset" >&2
+              exit 1
+            fi
+          done
+
+      - name: Draft-Release mit vollständigen Dateien anlegen
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.tag }}
+          name: ${{ inputs.tag }}
+          generate_release_notes: true
           draft: true
           files: |
             dist-artifacts/**/*.AppImage

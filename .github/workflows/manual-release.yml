@@ -63,14 +63,6 @@ jobs:
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: GitHub Release anlegen oder aktualisieren
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ steps.set_tag.outputs.tag }}
-          name: ${{ steps.set_tag.outputs.tag }}
-          generate_release_notes: true
-          draft: true
-
   artifacts:
     name: Release-Artefakte bauen
     needs: create_release

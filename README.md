@@ -85,11 +85,11 @@ Die Ausgabe landet im Verzeichnis `release/`. Jeder Paketname enthält die aktue
 Version aus `package.json`, zum Beispiel
 `kaderblick-analyse-player-2.5.1-linux-x86_64.AppImage`.
 
-Releases werden über [Release Please](https://github.com/googleapis/release-please-action)
-automatisiert. Conventional-Commit-Nachrichten werden in einem Release-PR gesammelt;
-nach dessen Merge wird zunächst ein nichtöffentlicher Draft erzeugt. Erst wenn die
-Windows-, Linux- und macOS-Artefakte vollständig gebaut, geprüft und angehängt sind,
-wird das GitHub Release veröffentlicht.
+Release-relevante Conventional Commits auf `main` lösen automatisch die nächste
+Version aus. Dafür ist kein Release-PR und keine manuelle Freigabe erforderlich.
+Zuerst werden die Windows-, Linux- und macOS-Artefakte gebaut und vollständig geprüft.
+Erst danach wird ein Draft mit allen Dateien angelegt, nochmals geprüft und als
+GitHub Release veröffentlicht.
 
 Commit-Nachrichten müssen dem [Conventional Commits](https://www.conventionalcommits.org/)-Standard folgen.
 

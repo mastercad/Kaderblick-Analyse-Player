@@ -1,4 +1,4 @@
-name: Release Please
+name: Automatisches Release
 
 on:
   push:
@@ -7,8 +7,10 @@ on:
 
 permissions:
   contents: write
-  issues: write
-  pull-requests: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
 
 jobs:
   ci:
@@ -16,13 +18,13 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   release:
-    name: Release-PR oder GitHub Release erzeugen
+    name: Version und Tag erzeugen
     runs-on: ubuntu-latest
     needs: ci
     outputs:
-      published: ${{ steps.release.outputs.release_created }}
-      version: ${{ steps.release.outputs.version }}
-      tag: ${{ steps.release.outputs.tag_name }}
+      published: ${{ steps.prepare.outputs.release }}
+      version: ${{ steps.prepare.outputs.version }}
+      tag: ${{ steps.prepare.outputs.tag }}
 
     steps:
       - name: Repository auschecken
@@ -30,13 +32,42 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Release Please ausführen
-        id: release
-        uses: googleapis/release-please-action@v5
+      - name: Node.js einrichten
+        uses: actions/setup-node@v7
         with:
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-          token: ${{ secrets.GITHUB_TOKEN }}
+          node-version: 24
+          cache: npm
+
+      - name: Neueren main-Stand erkennen
+        id: current
+        shell: bash
+        run: |
+          git fetch origin main
+          if [[ "$(git rev-parse origin/main)" == "$GITHUB_SHA" ]]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "Ein neuerer main-Push übernimmt die Release-Erzeugung."
+          fi
+
+      - name: Release-Version vorbereiten
+        id: prepare
+        if: steps.current.outputs.current == 'true'
+        run: node scripts/prepareRelease.mjs
+
+      - name: Versionscommit und Tag pushen
+        if: steps.prepare.outputs.release == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.prepare.outputs.version }}
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json CHANGELOG.md
+          git commit -m "chore(release): ${RELEASE_VERSION} [skip ci]"
+          git tag "$RELEASE_TAG"
+          git push --atomic origin HEAD:main "$RELEASE_TAG"
 
   artifacts:
     name: Release-Artefakte bauen
