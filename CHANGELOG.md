@@ -1,3 +1,11 @@
+## [2.9.2](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.9.1...v2.9.2) (2026-10-08)
+
+### Bug Fixes
+
+* fix(release): restore automatic main releases ([38b5a89](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/38b5a89e1582140f2237633867e0d5e9c658b0aa))
+* fix(release): preserve version tag format ([58f7841](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/58f7841b848d901bcb60e33e64a1e920693073f1))
+* fix(release): publish only after all assets exist ([abb4453](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/abb44533c8c628aca1ae9bd889254ed351c046cc))
+
 # [2.9.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.8.0...v2.9.0) (2026-10-08)
 
 
