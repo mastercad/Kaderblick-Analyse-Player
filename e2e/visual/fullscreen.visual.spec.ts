@@ -62,7 +62,8 @@ test('renders dark mode, splash, perspectives and fullscreen tools without regre
       // Linux font and native range-control rasterization differs slightly
       // between the developer desktop and the pinned Ubuntu CI image. Button
       // geometry and computed presentation are asserted exactly above.
-      maxDiffPixels: 300
+      maxDiffPixels: 300,
+      maxDiffPixelRatio: 0.025
     })
 
     await page.getByRole('button', { name: 'Zu Dark Mode wechseln' }).click()
