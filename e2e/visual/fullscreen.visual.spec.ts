@@ -58,7 +58,12 @@ test('renders dark mode, splash, perspectives and fullscreen tools without regre
     ])
     expect(perspectivePresentation).toEqual(filterPresentation)
     expect(perspectivePresentation).toEqual(fullscreenPresentation)
-    await expect(utilityControls).toHaveScreenshot('inline-utility-buttons-light.png')
+    await expect(utilityControls).toHaveScreenshot('inline-utility-buttons-light.png', {
+      // Linux font and native range-control rasterization differs slightly
+      // between the developer desktop and the pinned Ubuntu CI image. Button
+      // geometry and computed presentation are asserted exactly above.
+      maxDiffPixels: 300
+    })
 
     await page.getByRole('button', { name: 'Zu Dark Mode wechseln' }).click()
 
