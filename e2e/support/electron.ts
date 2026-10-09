@@ -100,7 +100,7 @@ export async function configureSharedMatch(
   for (const fileName of fileNames) {
     const row = dialog.locator('.segment-editor__match-row').filter({ hasText: fileName })
     if (!await row.evaluate((element: HTMLDetailsElement) => element.open)) {
-      await row.locator('summary').click()
+      await row.locator(':scope > summary').click()
     }
     await row.getByLabel(`Spiel für ${fileName}`).fill('E2E-Testspiel')
     await row.getByLabel(`Dauer des Spielabschnitts 1 von ${fileName}`).fill(duration)

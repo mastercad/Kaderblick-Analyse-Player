@@ -125,6 +125,8 @@ Im Segment-Editor öffnet ihr unter `Spielzeit im Video festlegen` das gewünsch
 
 Für eine normale erste Halbzeit spult ihr zum Anstoß, klickt auf `Aktuelle Videoposition einsetzen` und lasst `Spieluhr startet bei 00:00` sowie `Dauer 45:00` stehen. Beginnt der Anstoß im Video beispielsweise bei `03:10`, zeigt der Editor als Ergebnis: Im Video `03:10–48:10` läuft die Spieluhr von `00:00–45:00`.
 
+Kennt ihr die Spielminute nicht, klappt im betreffenden Spielabschnitt optional `Aus Aufnahmezeiten berechnen` auf. Tragt dort Aufnahmebeginn, Aufnahmeende und die Uhrzeit des Anstoßes beziehungsweise Wiederbeginns ein. Mit `Vollständig` wird die ganze zeitliche Überschneidung der Aufnahme verwendet; alternativ begrenzt `Bis Spielminute …` die Zuordnung. Eine Vorschau stellt die bisherigen und die berechneten Werte gegenüber. Erst `Berechnete Zeiten übernehmen` füllt die drei vorhandenen Zeitfelder aus. Eine abweichende vorhandene Zuordnung muss zusätzlich ausdrücklich bestätigt werden. Die manuelle Eingabe bleibt unverändert verfügbar.
+
 Die Vorlagen `1. Halbzeit` und `2. Halbzeit` setzen Start und Dauer der Spieluhr passend voraus. Die Position des Anstoßes beziehungsweise Wiederbeginns im Video bestimmt ihr weiterhin selbst.
 
 Unberührte Videos erhalten keine automatische Spielzeit-Zuordnung. Eine vorhandene falsche Zuordnung könnt ihr mit `Spielzeit-Zuordnung entfernen` vollständig löschen. Unfertige Zeitangaben eines Videos verhindern nicht, dass gültige Änderungen an einem anderen Video gespeichert werden.

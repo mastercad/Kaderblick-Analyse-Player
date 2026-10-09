@@ -157,6 +157,119 @@ describe('SegmentEditor', () => {
       expect(screen.getByText('Ergebnis: Im Video 03:10–48:10 läuft die Spieluhr von 00:00 bis 45:00.')).toBeInTheDocument()
     })
 
+    it('keeps the recording-time calculation optional and the existing manual fields available', () => {
+      const onVideoSettingsChange = vi.fn()
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onVideoSettingsChange={onVideoSettingsChange}
+          onClose={() => {}}
+        />
+      )
+
+      const helper = screen.getByText('Optional: aus Aufnahmezeiten berechnen').closest('details')!
+      expect(helper).not.toHaveAttribute('open')
+      expect(screen.getByRole('textbox', { name: 'Anstoß oder Wiederbeginn im Video für Spielabschnitt 1 von vid1.mp4' })).toHaveValue('00:00')
+
+      fireEvent.click(within(helper).getByText('Optional: aus Aufnahmezeiten berechnen'))
+      fireEvent.change(within(helper).getByLabelText('Aufnahmebeginn für Spielabschnitt 1 von vid1.mp4'), { target: { value: '14:55:00' } })
+      fireEvent.change(within(helper).getByLabelText('Aufnahmeende für Spielabschnitt 1 von vid1.mp4'), { target: { value: '15:50:00' } })
+      fireEvent.change(within(helper).getByLabelText('Uhrzeit des Spielbeginns für Spielabschnitt 1 von vid1.mp4'), { target: { value: '15:00:00' } })
+
+      expect(within(helper).getByText('Vorschau – diese Werte würden gesetzt:')).toBeInTheDocument()
+      expect(within(helper).getByText('Ergebnis: Im Video 05:00–55:00 läuft die Spieluhr von 00:00 bis 50:00.')).toBeInTheDocument()
+      fireEvent.click(within(helper).getByRole('button', { name: 'Berechnete Zeiten übernehmen' }))
+
+      expect(screen.getByRole('textbox', { name: 'Anstoß oder Wiederbeginn im Video für Spielabschnitt 1 von vid1.mp4' })).toHaveValue('05:00')
+      expect(screen.getByRole('textbox', { name: 'Spieluhr startet bei für Spielabschnitt 1 von vid1.mp4' })).toHaveValue('00:00')
+      expect(screen.getByRole('textbox', { name: 'Dauer des Spielabschnitts 1 von vid1.mp4' })).toHaveValue('50:00')
+      expect(onVideoSettingsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({ videoTimeStartSeconds: 5 * 60, matchTimeStartSeconds: 0, matchTimeEndSeconds: 50 * 60 })
+      ])
+    })
+
+    it('can derive a late recording start and limit it to a chosen match time', () => {
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      const helper = screen.getByText('Optional: aus Aufnahmezeiten berechnen').closest('details')!
+      fireEvent.click(within(helper).getByText('Optional: aus Aufnahmezeiten berechnen'))
+      fireEvent.change(within(helper).getByLabelText('Aufnahmebeginn für Spielabschnitt 1 von vid1.mp4'), { target: { value: '15:10:00' } })
+      fireEvent.change(within(helper).getByLabelText('Aufnahmeende für Spielabschnitt 1 von vid1.mp4'), { target: { value: '16:10:00' } })
+      fireEvent.change(within(helper).getByLabelText('Uhrzeit des Spielbeginns für Spielabschnitt 1 von vid1.mp4'), { target: { value: '15:00:00' } })
+      fireEvent.change(within(helper).getByLabelText('Verwendete Aufnahmelänge für Spielabschnitt 1 von vid1.mp4'), { target: { value: 'match-time' } })
+      fireEvent.change(within(helper).getByLabelText('Letzte Spielminute für Spielabschnitt 1 von vid1.mp4'), { target: { value: '45:00' } })
+      fireEvent.click(within(helper).getByRole('button', { name: 'Berechnete Zeiten übernehmen' }))
+
+      expect(screen.getByRole('textbox', { name: 'Anstoß oder Wiederbeginn im Video für Spielabschnitt 1 von vid1.mp4' })).toHaveValue('00:00')
+      expect(screen.getByRole('textbox', { name: 'Spieluhr startet bei für Spielabschnitt 1 von vid1.mp4' })).toHaveValue('10:00')
+      expect(screen.getByRole('textbox', { name: 'Dauer des Spielabschnitts 1 von vid1.mp4' })).toHaveValue('35:00')
+    })
+
+    it('requires explicit confirmation before replacing an existing mapping', () => {
+      const configuredVideo: VideoFileDescriptor = {
+        ...vid1,
+        matchTimeRanges: [{ id: 'existing', videoStartSeconds: 120, videoEndSeconds: 2820, matchStartSeconds: 0, matchEndSeconds: 2700 }]
+      }
+      const onVideoSettingsChange = vi.fn()
+      render(
+        <SegmentEditor
+          videos={[configuredVideo]}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onVideoSettingsChange={onVideoSettingsChange}
+          onClose={() => {}}
+        />
+      )
+
+      const helper = screen.getByText('Optional: aus Aufnahmezeiten berechnen').closest('details')!
+      fireEvent.click(within(helper).getByText('Optional: aus Aufnahmezeiten berechnen'))
+      fireEvent.change(within(helper).getByLabelText('Aufnahmebeginn für Spielabschnitt 1 von vid1.mp4'), { target: { value: '14:55:00' } })
+      fireEvent.change(within(helper).getByLabelText('Aufnahmeende für Spielabschnitt 1 von vid1.mp4'), { target: { value: '15:50:00' } })
+      fireEvent.change(within(helper).getByLabelText('Uhrzeit des Spielbeginns für Spielabschnitt 1 von vid1.mp4'), { target: { value: '15:00:00' } })
+
+      expect(within(helper).getByText('Die vorhandene Zuordnung bleibt unverändert, bis du das Ersetzen ausdrücklich bestätigst.')).toBeInTheDocument()
+      expect(within(helper).getByText('02:00 →', { exact: false })).toBeInTheDocument()
+      fireEvent.click(within(helper).getByRole('button', { name: 'Vorhandene Zuordnung ersetzen …' }))
+      expect(onVideoSettingsChange).not.toHaveBeenCalled()
+      expect(within(helper).getByText('Vorhandene Zuordnung wirklich ersetzen?')).toBeInTheDocument()
+
+      fireEvent.click(within(helper).getByRole('button', { name: 'Ja, Werte ersetzen' }))
+      expect(onVideoSettingsChange).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole('textbox', { name: 'Anstoß oder Wiederbeginn im Video für Spielabschnitt 1 von vid1.mp4' })).toHaveValue('05:00')
+    })
+
+    it('leaves the existing mapping untouched when the optional clock inputs are incomplete', () => {
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      const helper = screen.getByText('Optional: aus Aufnahmezeiten berechnen').closest('details')!
+      fireEvent.click(within(helper).getByText('Optional: aus Aufnahmezeiten berechnen'))
+
+      expect(within(helper).getByRole('button', { name: 'Berechnete Zeiten übernehmen' })).toBeDisabled()
+      expect(within(helper).getByText('Noch keine Vorschau. Trage zuerst die drei Uhrzeiten ein.')).toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: 'Anstoß oder Wiederbeginn im Video für Spielabschnitt 1 von vid1.mp4' })).toHaveValue('00:00')
+      expect(screen.getByRole('textbox', { name: 'Dauer des Spielabschnitts 1 von vid1.mp4' })).toHaveValue('45:00')
+    })
+
     it('fills the game-clock start for the second-half template', () => {
       render(
         <SegmentEditor

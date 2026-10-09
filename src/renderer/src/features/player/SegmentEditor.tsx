@@ -40,6 +40,83 @@ interface VideoSetting {
   ranges: VideoTimeRangeSetting[]
 }
 
+interface RecordingTimeCalculation {
+  recordingStartInput: string
+  recordingEndInput: string
+  matchStartInput: string
+  matchClockAtStartInput: string
+  endMode: 'full' | 'match-time'
+  matchEndInput: string
+  errorMessage?: string
+}
+
+const emptyRecordingTimeCalculation = (): RecordingTimeCalculation => ({
+  recordingStartInput: '',
+  recordingEndInput: '',
+  matchStartInput: '',
+  matchClockAtStartInput: '00:00',
+  endMode: 'full',
+  matchEndInput: '45:00'
+})
+
+const parseWallClockInput = (value: string): number | null => {
+  const match = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(value.trim())
+  if (!match) return null
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  const seconds = Number(match[3] ?? 0)
+  if (hours > 23 || minutes > 59 || seconds > 59) return null
+  return hours * 3600 + minutes * 60 + seconds
+}
+
+const getForwardClockDifference = (startSeconds: number, endSeconds: number): number => (
+  (endSeconds - startSeconds + 24 * 3600) % (24 * 3600)
+)
+
+const getNearestClockDifference = (startSeconds: number, targetSeconds: number): number => {
+  const forward = getForwardClockDifference(startSeconds, targetSeconds)
+  return forward > 12 * 3600 ? forward - 24 * 3600 : forward
+}
+
+const calculateRangeFromRecordingTimes = (calculation: RecordingTimeCalculation) => {
+  const recordingStartSeconds = parseWallClockInput(calculation.recordingStartInput)
+  const recordingEndSeconds = parseWallClockInput(calculation.recordingEndInput)
+  const matchStartSeconds = parseWallClockInput(calculation.matchStartInput)
+  const matchClockAtStartSeconds = parseTimeInput(calculation.matchClockAtStartInput)
+  if (recordingStartSeconds === null || recordingEndSeconds === null || matchStartSeconds === null || matchClockAtStartSeconds === null) {
+    return { errorMessage: 'Bitte Aufnahmebeginn, Aufnahmeende und Spielbeginn als gültige Uhrzeiten eingeben.' }
+  }
+
+  const recordingDurationSeconds = getForwardClockDifference(recordingStartSeconds, recordingEndSeconds)
+  if (recordingDurationSeconds <= 0) {
+    return { errorMessage: 'Aufnahmebeginn und Aufnahmeende dürfen nicht identisch sein.' }
+  }
+
+  const matchStartInVideoSeconds = getNearestClockDifference(recordingStartSeconds, matchStartSeconds)
+  const videoStartSeconds = Math.max(0, matchStartInVideoSeconds)
+  const rangeMatchStartSeconds = matchClockAtStartSeconds + Math.max(0, -matchStartInVideoSeconds)
+  const fullVideoEndSeconds = recordingDurationSeconds
+  let videoEndSeconds = fullVideoEndSeconds
+
+  if (calculation.endMode === 'match-time') {
+    const requestedMatchEndSeconds = parseTimeInput(calculation.matchEndInput)
+    if (requestedMatchEndSeconds === null) {
+      return { errorMessage: 'Bitte eine gültige Spielminute für das Ende eingeben.' }
+    }
+    videoEndSeconds = Math.min(
+      fullVideoEndSeconds,
+      matchStartInVideoSeconds + requestedMatchEndSeconds - matchClockAtStartSeconds
+    )
+  }
+
+  const durationSeconds = videoEndSeconds - videoStartSeconds
+  if (durationSeconds <= 0) {
+    return { errorMessage: 'In diesen Uhrzeiten liegt kein verwendbarer Teil des Spielabschnitts.' }
+  }
+
+  return { videoStartSeconds, matchStartSeconds: rangeMatchStartSeconds, durationSeconds }
+}
+
 const clearVideoMatchTimeMapping = (video: VideoFileDescriptor, matchGroupInput: string): VideoFileDescriptor => {
   const nextVideo: VideoFileDescriptor = {
     ...video,
@@ -138,6 +215,8 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
   })
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [recordingTimeCalculations, setRecordingTimeCalculations] = useState<Record<string, RecordingTimeCalculation>>({})
+  const [recordingTimeReplacementConfirmation, setRecordingTimeReplacementConfirmation] = useState<string>()
   const [videoSettings, setVideoSettings] = useState<VideoSetting[]>(() => videos.map((video) => {
     const ranges = getMatchVideoTimeRanges(videos, video)
     return {
@@ -347,6 +426,29 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
       : setting))
   }
 
+  const updateRecordingTimeCalculation = (rangeId: string, changes: Partial<RecordingTimeCalculation>): void => {
+    if (recordingTimeReplacementConfirmation === rangeId) setRecordingTimeReplacementConfirmation(undefined)
+    setRecordingTimeCalculations((current) => {
+      const nextCalculation = { ...(current[rangeId] ?? emptyRecordingTimeCalculation()), ...changes }
+      if (!('errorMessage' in changes)) delete nextCalculation.errorMessage
+      return { ...current, [rangeId]: nextCalculation }
+    })
+  }
+
+  const applyRecordingTimeCalculation = (path: string, rangeId: string): void => {
+    const calculation = recordingTimeCalculations[rangeId] ?? emptyRecordingTimeCalculation()
+    const result = calculateRangeFromRecordingTimes(calculation)
+    if ('errorMessage' in result) {
+      updateRecordingTimeCalculation(rangeId, { errorMessage: result.errorMessage })
+      return
+    }
+    updateTimeRange(path, rangeId, {
+      videoStartInput: formatSegmentTime(result.videoStartSeconds),
+      matchStartInput: formatSegmentTime(result.matchStartSeconds),
+      durationInput: formatSegmentTime(result.durationSeconds)
+    })
+  }
+
   const handleEditorDragStart = (event: React.PointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return
     dragRef.current = {
@@ -431,6 +533,24 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
                     {setting.ranges.map((range, rangeIndex) => {
                       const values = getRangeValues(range)
                       const name = video?.fileName ?? setting.path
+                      const recordingTimeCalculation = recordingTimeCalculations[range.id] ?? emptyRecordingTimeCalculation()
+                      const hasRecordingTimeInput = Boolean(
+                        recordingTimeCalculation.recordingStartInput ||
+                        recordingTimeCalculation.recordingEndInput ||
+                        recordingTimeCalculation.matchStartInput
+                      )
+                      const recordingTimePreview = hasRecordingTimeInput
+                        ? calculateRangeFromRecordingTimes(recordingTimeCalculation)
+                        : null
+                      const previewValues = recordingTimePreview && !('errorMessage' in recordingTimePreview)
+                        ? recordingTimePreview
+                        : null
+                      const replacesExistingValues = Boolean(setting.configured && values && previewValues && (
+                        values.videoStartSeconds !== previewValues.videoStartSeconds ||
+                        values.matchStartSeconds !== previewValues.matchStartSeconds ||
+                        values.durationSeconds !== previewValues.durationSeconds
+                      ))
+                      const replacementConfirmed = recordingTimeReplacementConfirmation === range.id
                       return (
                         <div className="segment-editor__time-range" key={range.id}>
                           <div className="segment-editor__time-range-heading">
@@ -459,6 +579,80 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
                               ? `Ergebnis: Im Video ${formatSegmentTime(values.videoStartSeconds)}–${formatSegmentTime(values.videoStartSeconds + values.durationSeconds)} läuft die Spieluhr von ${formatSegmentTime(values.matchStartSeconds)} bis ${formatSegmentTime(values.matchStartSeconds + values.durationSeconds)}.`
                               : 'Bitte drei gültige Zeiten eingeben.'}
                           </div>
+                          <details className="segment-editor__recording-time-helper">
+                            <summary>Optional: aus Aufnahmezeiten berechnen</summary>
+                            <p>Wenn die Spielminute unbekannt ist, werden die vorhandenen Felder aus den Uhrzeiten berechnet. Vor dem Übernehmen siehst du alle Änderungen.</p>
+                            <div className="segment-editor__recording-time-fields">
+                              <label>
+                                Aufnahme von
+                                <input type="time" step="1" aria-label={`Aufnahmebeginn für Spielabschnitt ${rangeIndex + 1} von ${name}`} value={recordingTimeCalculation.recordingStartInput} onChange={(event) => updateRecordingTimeCalculation(range.id, { recordingStartInput: event.target.value })} />
+                              </label>
+                              <label>
+                                Aufnahme bis
+                                <input type="time" step="1" aria-label={`Aufnahmeende für Spielabschnitt ${rangeIndex + 1} von ${name}`} value={recordingTimeCalculation.recordingEndInput} onChange={(event) => updateRecordingTimeCalculation(range.id, { recordingEndInput: event.target.value })} />
+                              </label>
+                              <label>
+                                Anstoß/Wiederbeginn um
+                                <input type="time" step="1" aria-label={`Uhrzeit des Spielbeginns für Spielabschnitt ${rangeIndex + 1} von ${name}`} value={recordingTimeCalculation.matchStartInput} onChange={(event) => updateRecordingTimeCalculation(range.id, { matchStartInput: event.target.value })} />
+                              </label>
+                              <label>
+                                Spieluhr dabei
+                                <input aria-label={`Spieluhr beim Spielbeginn für Spielabschnitt ${rangeIndex + 1} von ${name}`} value={recordingTimeCalculation.matchClockAtStartInput} onChange={(event) => updateRecordingTimeCalculation(range.id, { matchClockAtStartInput: event.target.value })} placeholder="00:00" />
+                              </label>
+                              <label>
+                                Aufnahme verwenden
+                                <select aria-label={`Verwendete Aufnahmelänge für Spielabschnitt ${rangeIndex + 1} von ${name}`} value={recordingTimeCalculation.endMode} onChange={(event) => updateRecordingTimeCalculation(range.id, { endMode: event.target.value as RecordingTimeCalculation['endMode'] })}>
+                                  <option value="full">Vollständig</option>
+                                  <option value="match-time">Bis Spielminute …</option>
+                                </select>
+                              </label>
+                              {recordingTimeCalculation.endMode === 'match-time' ? (
+                                <label>
+                                  Bis Spielminute
+                                  <input aria-label={`Letzte Spielminute für Spielabschnitt ${rangeIndex + 1} von ${name}`} value={recordingTimeCalculation.matchEndInput} onChange={(event) => updateRecordingTimeCalculation(range.id, { matchEndInput: event.target.value })} placeholder="45:00" />
+                                </label>
+                              ) : null}
+                            </div>
+                            <div className="segment-editor__recording-time-preview" aria-live="polite">
+                              {!hasRecordingTimeInput ? (
+                                <p>Noch keine Vorschau. Trage zuerst die drei Uhrzeiten ein.</p>
+                              ) : recordingTimePreview && 'errorMessage' in recordingTimePreview ? (
+                                <p className="segment-editor__recording-time-error">{recordingTimePreview.errorMessage}</p>
+                              ) : previewValues ? (
+                                <>
+                                  <strong>Vorschau – diese Werte würden gesetzt:</strong>
+                                  <dl>
+                                    <div><dt>Anstoß/Wiederbeginn im Video</dt><dd>{values ? `${formatSegmentTime(values.videoStartSeconds)} → ` : ''}<strong>{formatSegmentTime(previewValues.videoStartSeconds)}</strong></dd></div>
+                                    <div><dt>Spieluhr startet bei</dt><dd>{values ? `${formatSegmentTime(values.matchStartSeconds)} → ` : ''}<strong>{formatSegmentTime(previewValues.matchStartSeconds)}</strong></dd></div>
+                                    <div><dt>Dauer des Spielabschnitts</dt><dd>{values ? `${formatSegmentTime(values.durationSeconds)} → ` : ''}<strong>{formatSegmentTime(previewValues.durationSeconds)}</strong></dd></div>
+                                  </dl>
+                                  <p>Ergebnis: Im Video {formatSegmentTime(previewValues.videoStartSeconds)}–{formatSegmentTime(previewValues.videoStartSeconds + previewValues.durationSeconds)} läuft die Spieluhr von {formatSegmentTime(previewValues.matchStartSeconds)} bis {formatSegmentTime(previewValues.matchStartSeconds + previewValues.durationSeconds)}.</p>
+                                  {replacesExistingValues ? <p className="segment-editor__recording-time-warning">Die vorhandene Zuordnung bleibt unverändert, bis du das Ersetzen ausdrücklich bestätigst.</p> : null}
+                                </>
+                              ) : null}
+                            </div>
+                            {recordingTimeCalculation.errorMessage ? <p className="segment-editor__recording-time-error" role="alert">{recordingTimeCalculation.errorMessage}</p> : null}
+                            {replacesExistingValues && replacementConfirmed ? (
+                              <div className="segment-editor__recording-time-confirmation">
+                                <strong>Vorhandene Zuordnung wirklich ersetzen?</strong>
+                                <button className="button button--subtle" type="button" onClick={() => setRecordingTimeReplacementConfirmation(undefined)}>Abbrechen</button>
+                                <button className="button button--primary" type="button" onClick={() => {
+                                  applyRecordingTimeCalculation(setting.path, range.id)
+                                  setRecordingTimeReplacementConfirmation(undefined)
+                                }}>Ja, Werte ersetzen</button>
+                              </div>
+                            ) : (
+                              <button
+                                className="button button--subtle"
+                                type="button"
+                                disabled={!previewValues}
+                                onClick={() => {
+                                  if (replacesExistingValues) setRecordingTimeReplacementConfirmation(range.id)
+                                  else applyRecordingTimeCalculation(setting.path, range.id)
+                                }}
+                              >{replacesExistingValues ? 'Vorhandene Zuordnung ersetzen …' : 'Berechnete Zeiten übernehmen'}</button>
+                            )}
+                          </details>
                           <button className="button button--subtle segment-editor__remove-time-range" type="button" disabled={setting.ranges.length <= 1} onClick={() => removeTimeRange(setting.path, range.id)}>Spielabschnitt entfernen</button>
                         </div>
                       )

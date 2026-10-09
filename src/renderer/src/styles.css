@@ -4605,6 +4605,88 @@ kbd {
   font-size: 0.78rem;
 }
 
+.segment-editor__recording-time-helper {
+  grid-column: 1 / -1;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 0.78rem;
+}
+
+.segment-editor__recording-time-helper > summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.segment-editor__recording-time-helper > p {
+  margin: 7px 0 0;
+}
+
+.segment-editor__recording-time-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(145px, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.segment-editor__recording-time-helper .segment-editor__recording-time-error {
+  margin: 0 0 8px;
+  color: var(--danger, #c83c3c);
+}
+
+.segment-editor__recording-time-preview {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 10px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: var(--panel-hover, rgb(255 255 255 / 0.04));
+}
+
+.segment-editor__recording-time-preview > p {
+  margin: 0;
+}
+
+.segment-editor__recording-time-preview dl {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.segment-editor__recording-time-preview dl > div {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) auto;
+  gap: 12px;
+}
+
+.segment-editor__recording-time-preview dt {
+  color: var(--text-soft);
+}
+
+.segment-editor__recording-time-preview dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.segment-editor__recording-time-preview .segment-editor__recording-time-warning {
+  color: var(--warning-text, #a76700);
+  font-weight: 600;
+}
+
+.segment-editor__recording-time-confirmation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.segment-editor__recording-time-confirmation > strong {
+  margin-right: auto;
+}
+
 .segment-editor__remove-time-range {
   grid-column: 2;
   grid-row: 2;
@@ -4648,6 +4730,8 @@ kbd {
   .segment-editor__match-row > summary,
   .segment-editor__time-range,
   .segment-editor__time-range-fields,
+  .segment-editor__recording-time-fields,
+  .segment-editor__recording-time-preview dl > div,
   .segment-editor__video-position-field {
     grid-template-columns: 1fr;
   }
