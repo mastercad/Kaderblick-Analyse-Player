@@ -23,6 +23,7 @@ test('renders dark mode, splash, perspectives and fullscreen tools without regre
   const application = await launchApplication()
   const { page } = application
   try {
+    await page.setViewportSize({ width: 1480, height: 980 })
     await selectVideoFiles(application, videos)
     await configureSharedMatch(application, fileNames)
 
