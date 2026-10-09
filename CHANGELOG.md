@@ -1,3 +1,9 @@
+## [2.9.3](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.9.2...v2.9.3) (2026-10-09)
+
+### Bug Fixes
+
+* fix(linux): persist Electron sandbox setup ([7b8cdea](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/7b8cdea040aa2d07de30480aa4e46b05f2ff75f3))
+
 ## [2.9.2](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.9.1...v2.9.2) (2026-10-08)
 
 ### Bug Fixes
