@@ -1,18 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  startAutomaticUpdates,
-  type AutoUpdateClient,
-  type AutoUpdateSchedule
-} from './autoUpdate'
+import { startAutomaticUpdates, type AutoUpdateClient, type AutoUpdateSchedule } from './autoUpdate'
 
-const makeUpdater = (checkForUpdatesAndNotify = vi.fn().mockResolvedValue(undefined)): AutoUpdateClient => ({
-  autoDownload: false,
-  autoInstallOnAppQuit: false,
-  allowPrerelease: true,
-  checkForUpdatesAndNotify,
-  on: vi.fn(),
-  removeListener: vi.fn()
-})
+const makeUpdater = (checkForUpdates = vi.fn().mockResolvedValue(undefined)) => {
+  const listeners = new Map<string, (...args: unknown[]) => void>()
+  const updater = {
+    autoDownload: true,
+    autoInstallOnAppQuit: true,
+    allowPrerelease: true,
+    checkForUpdates,
+    downloadUpdate: vi.fn().mockResolvedValue(undefined),
+    quitAndInstall: vi.fn(),
+    on: vi.fn((event: string, listener: (...args: unknown[]) => void) => listeners.set(event, listener)),
+    removeListener: vi.fn((event: string) => listeners.delete(event))
+  } as unknown as AutoUpdateClient
+  return { updater, emit: (event: string, value: unknown) => listeners.get(event)?.(value) }
+}
 
 const makeSchedule = () => {
   let initialCheck: (() => void) | undefined
@@ -34,37 +36,55 @@ const makeSchedule = () => {
 
 describe('automatic updates', () => {
   it('does nothing in development builds', () => {
-    const updater = makeUpdater()
+    const { updater } = makeUpdater()
     const { schedule } = makeSchedule()
 
-    startAutomaticUpdates(updater, 'disabled', schedule)
+    startAutomaticUpdates(updater, 'disabled', vi.fn(), schedule)
 
     expect(schedule.setTimeout).not.toHaveBeenCalled()
-    expect(updater.checkForUpdatesAndNotify).not.toHaveBeenCalled()
+    expect(updater.checkForUpdates).not.toHaveBeenCalled()
   })
 
-  it('starts only after a delay and enables background download plus install on quit', () => {
-    const updater = makeUpdater()
+  it('checks after a delay without downloading or installing behind the user', () => {
+    const { updater } = makeUpdater()
     const { schedule, runInitialCheck } = makeSchedule()
 
-    startAutomaticUpdates(updater, 'install', schedule)
+    startAutomaticUpdates(updater, 'install', vi.fn(), schedule)
 
-    expect(updater.checkForUpdatesAndNotify).not.toHaveBeenCalled()
-    expect(updater.autoDownload).toBe(true)
-    expect(updater.autoInstallOnAppQuit).toBe(true)
+    expect(updater.autoDownload).toBe(false)
+    expect(updater.autoInstallOnAppQuit).toBe(false)
     expect(updater.allowPrerelease).toBe(false)
     runInitialCheck()
-    expect(updater.checkForUpdatesAndNotify).toHaveBeenCalledOnce()
+    expect(updater.checkForUpdates).toHaveBeenCalledOnce()
+    expect(updater.downloadUpdate).not.toHaveBeenCalled()
   })
 
-  it('swallows offline failures and allows a later retry', async () => {
-    const check = vi.fn()
-      .mockRejectedValueOnce(new Error('ENETUNREACH'))
-      .mockResolvedValueOnce(undefined)
-    const updater = makeUpdater(check)
+  it('publishes the update and acts only after explicit download and restart commands', async () => {
+    const { updater, emit } = makeUpdater()
+    const publishStatus = vi.fn()
+    const controller = startAutomaticUpdates(updater, 'install', publishStatus, makeSchedule().schedule)
+
+    emit('update-available', { version: '2.12.0' })
+    expect(publishStatus).toHaveBeenLastCalledWith({ phase: 'available', version: '2.12.0' })
+
+    await controller.download()
+    expect(updater.downloadUpdate).toHaveBeenCalledOnce()
+    expect(publishStatus).toHaveBeenLastCalledWith({ phase: 'downloading', version: '2.12.0' })
+
+    emit('update-downloaded', { version: '2.12.0' })
+    expect(publishStatus).toHaveBeenLastCalledWith({ phase: 'downloaded', version: '2.12.0' })
+    expect(updater.quitAndInstall).not.toHaveBeenCalled()
+
+    controller.installAndRestart()
+    expect(updater.quitAndInstall).toHaveBeenCalledWith(false, true)
+  })
+
+  it('swallows offline check failures and allows a later retry', async () => {
+    const check = vi.fn().mockRejectedValueOnce(new Error('ENETUNREACH')).mockResolvedValueOnce(undefined)
+    const { updater } = makeUpdater(check)
     const { schedule, runInitialCheck, runRepeatedCheck } = makeSchedule()
 
-    startAutomaticUpdates(updater, 'install', schedule)
+    startAutomaticUpdates(updater, 'install', vi.fn(), schedule)
     runInitialCheck()
     await Promise.resolve()
     await Promise.resolve()
@@ -73,15 +93,14 @@ describe('automatic updates', () => {
     expect(check).toHaveBeenCalledTimes(2)
   })
 
-  it('does not start a second request while a check is still pending', () => {
-    const check = vi.fn(() => new Promise(() => undefined))
-    const updater = makeUpdater(check)
+  it('does not start a second request while a check is pending', () => {
+    const { updater } = makeUpdater(vi.fn(() => new Promise(() => undefined)))
     const { schedule, runInitialCheck, runRepeatedCheck } = makeSchedule()
 
-    startAutomaticUpdates(updater, 'install', schedule)
+    startAutomaticUpdates(updater, 'install', vi.fn(), schedule)
     runInitialCheck()
     runRepeatedCheck()
 
-    expect(check).toHaveBeenCalledOnce()
+    expect(updater.checkForUpdates).toHaveBeenCalledOnce()
   })
 })

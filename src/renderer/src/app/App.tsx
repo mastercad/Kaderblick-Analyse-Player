@@ -7,10 +7,11 @@ import { matchSegmentsToLoadedVideo, matchSegmentsToLoadedVideos, parseSegmentsC
 import { formatClockTime } from '../../../common/timeUtils'
 import { resolveSegmentForPlayback } from '../../../common/matchTimeUtils'
 import { removeVideoFromLibrary } from '../../../common/videoLibraryUtils'
-import type { AppInfo, AppSettingsExport, CsvFileDescriptor, FilterPreset, FilterSettings, PlayerJumpTimeMode, Segment, SegmentEditorDraft, SessionSnapshot, VideoFileDescriptor, VideoPreparationProgress } from '../../../common/types'
+import type { AppInfo, AppSettingsExport, CsvFileDescriptor, FilterPreset, FilterSettings, PlayerJumpTimeMode, Segment, SegmentEditorDraft, SessionSnapshot, UpdateStatus, VideoFileDescriptor, VideoPreparationProgress } from '../../../common/types'
 import { AboutDialog } from '../features/app/AboutDialog'
 import { SessionRestoreDialog } from '../features/app/SessionRestoreDialog'
 import { SettingsDialog } from '../features/app/SettingsDialog'
+import { UpdateDialog } from '../features/app/UpdateDialog'
 import { StartScreen } from '../features/app/StartScreen'
 import { FilterOverlay } from '../features/filters/FilterOverlay'
 import { FilterPresetSaveDialog } from '../features/filters/FilterPresetSaveDialog'
@@ -79,6 +80,8 @@ export function App() {
   const [repeatSingleSegment, setRepeatSingleSegment] = useState(false)
   const [aboutDialogVisible, setAboutDialogVisible] = useState(false)
   const [settingsDialogVisible, setSettingsDialogVisible] = useState(false)
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ phase: 'idle' })
+  const [updateDialogDismissed, setUpdateDialogDismissed] = useState(false)
   const [playerJumpTimeMode, setPlayerJumpTimeMode] = useState<PlayerJumpTimeMode>(loadPlayerJumpTimeMode)
   const [appInfo, setAppInfo] = useState<AppInfo>(defaultAppInfo)
   const [presetSaveDialogVisible, setPresetSaveDialogVisible] = useState(false)
@@ -116,6 +119,23 @@ export function App() {
   const [interstitialLogoDataUrl, setInterstitialLogoDataUrl] = useState<string | null>(() =>
     window.localStorage.getItem(interstitialLogoStorageKey)
   )
+
+  useEffect(() => {
+    let active = true
+    void window.desktopApi.getUpdateStatus().then((status) => {
+      if (active) setUpdateStatus(status)
+    })
+    const removeListener = window.desktopApi.onUpdateStatus((status) => {
+      setUpdateStatus(status)
+      if (status.phase === 'available' || status.phase === 'downloaded' || status.phase === 'error') {
+        setUpdateDialogDismissed(false)
+      }
+    })
+    return () => {
+      active = false
+      removeListener()
+    }
+  }, [])
 
   useEffect(() => {
     if (!headerMenuOpen) return
@@ -751,6 +771,25 @@ export function App() {
                     >
                       Über die App
                     </button>
+                    {updateStatus.phase !== 'idle' ? (
+                      <>
+                        <div className="header-menu__separator" role="separator" />
+                        <button
+                          className="header-menu__item"
+                          role="menuitem"
+                          type="button"
+                          onClick={() => { setUpdateDialogDismissed(false); setHeaderMenuOpen(false) }}
+                        >
+                          {updateStatus.phase === 'available'
+                            ? `Update ${updateStatus.version} herunterladen`
+                            : updateStatus.phase === 'downloading'
+                              ? 'Update-Download anzeigen'
+                              : updateStatus.phase === 'downloaded'
+                                ? `Update ${updateStatus.version} installieren`
+                                : 'Update-Status anzeigen'}
+                        </button>
+                      </>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -984,6 +1023,13 @@ export function App() {
           setStatusMessage(`Online-Video „${video.fileName}" hinzugefügt.`)
         }}
         onClose={() => setAddOnlineVideoDialogOpen(false)}
+      />
+      <UpdateDialog
+        status={updateStatus}
+        open={updateStatus.phase !== 'idle' && !updateDialogDismissed}
+        onClose={() => setUpdateDialogDismissed(true)}
+        onDownload={() => { void window.desktopApi.downloadUpdate() }}
+        onInstallAndRestart={() => { void window.desktopApi.installUpdateAndRestart() }}
       />
       <input
         ref={logoInputRef}

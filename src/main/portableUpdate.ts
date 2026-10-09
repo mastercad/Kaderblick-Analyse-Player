@@ -5,6 +5,7 @@ import { rename, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+import type { UpdateStatus } from '../common/types'
 
 const MANIFEST_URL = 'https://github.com/mastercad/Kaderblick-Analyse-Player/releases/latest/download/portable-update.json'
 const DEFAULT_INITIAL_DELAY_MS = 15_000
@@ -28,7 +29,7 @@ interface PortableUpdateOptions {
   executablePath: string
   temporaryDirectory: string
   fetch: typeof globalThis.fetch
-  notifyReady: (version: string) => void
+  publishStatus: (status: UpdateStatus) => void
   schedule?: PortableUpdateSchedule
   initialDelayMs?: number
   checkIntervalMs?: number
@@ -68,7 +69,8 @@ export const validatePortableUpdateManifest = (value: unknown): PortableUpdateMa
 const downloadVerifiedUpdate = async (
   fetchImplementation: typeof globalThis.fetch,
   manifest: PortableUpdateManifest,
-  temporaryDirectory: string
+  temporaryDirectory: string,
+  onProgress: (percent: number) => void
 ): Promise<string> => {
   const response = await fetchImplementation(
     `https://github.com/mastercad/Kaderblick-Analyse-Player/releases/latest/download/${encodeURIComponent(manifest.file)}`,
@@ -79,9 +81,13 @@ const downloadVerifiedUpdate = async (
   const partialPath = join(temporaryDirectory, `${manifest.file}.partial`)
   const readyPath = join(temporaryDirectory, manifest.file)
   const hash = createHash('sha512')
+  const totalBytes = Number(response.headers.get('content-length'))
+  let downloadedBytes = 0
   const hashingStream = new Transform({
     transform(chunk: Buffer, _encoding, callback) {
       hash.update(chunk)
+      downloadedBytes += chunk.length
+      if (Number.isFinite(totalBytes) && totalBytes > 0) onProgress(downloadedBytes / totalBytes * 100)
       callback(null, chunk)
     }
   })
@@ -99,11 +105,14 @@ const downloadVerifiedUpdate = async (
 
 export const startPortableAutomaticUpdates = (options: PortableUpdateOptions): {
   dispose: () => void
-  installOnExit: () => void
+  download: () => Promise<void>
+  installAndRestart: () => boolean
 } => {
   const schedule = options.schedule ?? defaultSchedule
   let checking = false
+  let downloading = false
   let readyUpdatePath: string | null = null
+  let availableManifest: PortableUpdateManifest | null = null
   const scriptPath = join(options.temporaryDirectory, 'kaderblick-portable-update.ps1')
   const replacementScript = [
     'param([int]$RunningProcessId, [string]$Source, [string]$Target)',
@@ -123,17 +132,15 @@ export const startPortableAutomaticUpdates = (options: PortableUpdateOptions): {
   ].join('\r\n')
 
   const check = async (): Promise<void> => {
-    if (checking || readyUpdatePath) return
+    if (checking || availableManifest || readyUpdatePath) return
     checking = true
     try {
       const response = await options.fetch(MANIFEST_URL, { cache: 'no-store' })
       if (!response.ok) return
       const manifest = validatePortableUpdateManifest(await response.json())
       if (!manifest || !isNewerVersion(manifest.version, options.currentVersion)) return
-      const downloadedUpdatePath = await downloadVerifiedUpdate(options.fetch, manifest, options.temporaryDirectory)
-      await writeFile(scriptPath, replacementScript, 'utf8')
-      readyUpdatePath = downloadedUpdatePath
-      options.notifyReady(manifest.version)
+      availableManifest = manifest
+      options.publishStatus({ phase: 'available', version: manifest.version })
     } catch {
       // Offline use is expected. Failed checks stay silent and are retried later.
     } finally {
@@ -151,13 +158,38 @@ export const startPortableAutomaticUpdates = (options: PortableUpdateOptions): {
       schedule.clearTimeout(initialTimer)
       schedule.clearInterval(repeatTimer)
     },
-    installOnExit: () => {
-      if (!readyUpdatePath) return
+    download: async () => {
+      if (!availableManifest || readyUpdatePath || downloading) return
+      const manifest = availableManifest
+      downloading = true
+      options.publishStatus({ phase: 'downloading', version: manifest.version })
+      try {
+        readyUpdatePath = await downloadVerifiedUpdate(
+          options.fetch,
+          manifest,
+          options.temporaryDirectory,
+          (percent) => options.publishStatus({ phase: 'downloading', version: manifest.version, percent })
+        )
+        await writeFile(scriptPath, replacementScript, 'utf8')
+        options.publishStatus({ phase: 'downloaded', version: manifest.version })
+      } catch (error) {
+        options.publishStatus({
+          phase: 'error',
+          version: manifest.version,
+          message: error instanceof Error ? error.message : 'Das Update konnte nicht heruntergeladen werden.'
+        })
+      } finally {
+        downloading = false
+      }
+    },
+    installAndRestart: () => {
+      if (!readyUpdatePath) return false
       spawn('powershell.exe', [
         '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath,
         String(process.pid), readyUpdatePath, options.executablePath
       ], { detached: true, windowsHide: true, stdio: 'ignore' }).unref()
       readyUpdatePath = null
+      return true
     }
   }
 }

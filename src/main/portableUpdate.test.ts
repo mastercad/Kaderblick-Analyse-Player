@@ -37,7 +37,7 @@ describe('portable updates', () => {
 
     startPortableAutomaticUpdates({
       currentVersion: '2.7.0', executablePath: 'C:\\Player.exe', temporaryDirectory: 'C:\\Temp',
-      fetch: fetchMock, notifyReady: vi.fn(), schedule
+      fetch: fetchMock, publishStatus: vi.fn(), schedule
     })
     runCheck?.()
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
@@ -55,16 +55,16 @@ describe('portable updates', () => {
       clearInterval: vi.fn()
     }
     const fetchMock = vi.fn().mockRejectedValue(new Error('ENETUNREACH'))
-    const notifyReady = vi.fn()
+    const publishStatus = vi.fn()
 
     startPortableAutomaticUpdates({
       currentVersion: '2.7.0', executablePath: 'C:\\Player.exe', temporaryDirectory: 'C:\\Temp',
-      fetch: fetchMock, notifyReady, schedule
+      fetch: fetchMock, publishStatus, schedule
     })
     runCheck?.()
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
 
-    expect(notifyReady).not.toHaveBeenCalled()
+    expect(publishStatus).not.toHaveBeenCalled()
   })
 
   it('downloads a newer portable build, verifies it and announces readiness', async () => {
@@ -85,14 +85,18 @@ describe('portable updates', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ version: '2.8.0', file, sha512 })))
       .mockResolvedValueOnce(new Response(payload))
-    const notifyReady = vi.fn()
+    const publishStatus = vi.fn()
 
     const updater = startPortableAutomaticUpdates({
       currentVersion: '2.7.0', executablePath: 'C:\\Player.exe', temporaryDirectory,
-      fetch: fetchMock, notifyReady, schedule
+      fetch: fetchMock, publishStatus, schedule
     })
     runCheck?.()
-    await vi.waitFor(() => expect(notifyReady).toHaveBeenCalledWith('2.8.0'))
+    await vi.waitFor(() => expect(publishStatus).toHaveBeenCalledWith({ phase: 'available', version: '2.8.0' }))
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    await updater.download()
+    expect(publishStatus).toHaveBeenCalledWith({ phase: 'downloaded', version: '2.8.0' })
 
     expect(await readFile(join(temporaryDirectory, file), 'utf8')).toBe('portable executable')
     expect(await readFile(join(temporaryDirectory, 'kaderblick-portable-update.ps1'), 'utf8'))

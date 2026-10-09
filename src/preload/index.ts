@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { DesktopApi } from './api'
-import type { AppSettingsExport, FilterPreset, VideoPreparationProgress } from '../common/types'
+import type { AppSettingsExport, FilterPreset, UpdateStatus, VideoPreparationProgress } from '../common/types'
 
 const desktopApi: DesktopApi = {
   pickVideoFile: () => ipcRenderer.invoke('dialog:pickVideoFile'),
@@ -25,6 +25,14 @@ const desktopApi: DesktopApi = {
   exportAppSettings: (settings: AppSettingsExport) => ipcRenderer.invoke('app:settings:export', settings),
   importAppSettings: () => ipcRenderer.invoke('app:settings:import'),
   fileExists: (filePath: string) => ipcRenderer.invoke('fs:fileExists', filePath),
+  getUpdateStatus: () => ipcRenderer.invoke('app:updateStatus'),
+  downloadUpdate: () => ipcRenderer.invoke('app:updateDownload'),
+  installUpdateAndRestart: () => ipcRenderer.invoke('app:updateInstallAndRestart'),
+  onUpdateStatus: (listener) => {
+    const handleStatus = (_event: Electron.IpcRendererEvent, status: UpdateStatus): void => listener(status)
+    ipcRenderer.on('app:updateStatus', handleStatus)
+    return () => ipcRenderer.removeListener('app:updateStatus', handleStatus)
+  },
   onVideoPreparationProgress: (listener) => {
     const handleProgress = (_event: Electron.IpcRendererEvent, progress: VideoPreparationProgress): void => {
       listener(progress)

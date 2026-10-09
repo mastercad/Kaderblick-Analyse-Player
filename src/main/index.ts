@@ -1,10 +1,10 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, ipcMain, Notification, protocol, session } from 'electron'
+import { app, BrowserWindow, ipcMain, protocol, session } from 'electron'
 import { defaultAppInfo } from '../common/appInfo'
 import { KVIDEO_SCHEME } from '../common/streaming'
-import type { AppSettingsExport, FilterPreset } from '../common/types'
+import type { AppSettingsExport, FilterPreset, UpdateStatus } from '../common/types'
 import { captureAndSaveScreenshot, exportAppSettingsToJson, importAppSettingsFromJson, exportPresetsToJson, importPresetsFromJson, pickCsvFile, pickVideoFile, pickVideoFiles, preparePlaybackFallbackForPath, saveCsvFile } from './dialogs'
 import { readStoredPresets, writeStoredPresets } from './presetStorage'
 import { initStreamingProtocol, registerStreamingProtocol } from './streamingProtocol'
@@ -41,6 +41,24 @@ protocol.registerSchemesAsPrivileged([{
 }])
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
+
+interface UpdateController {
+  download: () => Promise<void>
+  installAndRestart: () => void
+}
+
+let updateStatus: UpdateStatus = { phase: 'idle' }
+let updateController: UpdateController = {
+  download: async () => undefined,
+  installAndRestart: () => undefined
+}
+
+const publishUpdateStatus = (status: UpdateStatus): void => {
+  updateStatus = status
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('app:updateStatus', status)
+  }
+}
 
 function configureYouTubeRequestIdentity(): void {
   session.fromPartition('persist:main').webRequest.onBeforeSendHeaders(
@@ -138,6 +156,9 @@ app.whenReady().then(() => {
   ipcMain.handle('app:settings:export', (_, settings: AppSettingsExport) => exportAppSettingsToJson(settings))
   ipcMain.handle('app:settings:import', () => importAppSettingsFromJson())
   ipcMain.handle('fs:fileExists', (_, filePath: string) => existsSync(filePath))
+  ipcMain.handle('app:updateStatus', () => updateStatus)
+  ipcMain.handle('app:updateDownload', () => updateController.download())
+  ipcMain.handle('app:updateInstallAndRestart', () => updateController.installAndRestart())
 
   createWindow()
   const portableExecutablePath = process.env.PORTABLE_EXECUTABLE_FILE
@@ -147,18 +168,21 @@ app.whenReady().then(() => {
       executablePath: portableExecutablePath,
       temporaryDirectory: app.getPath('temp'),
       fetch: globalThis.fetch,
-      notifyReady: (version) => {
-        if (!Notification.isSupported()) return
-        new Notification({
-          title: 'Kaderblick-Update heruntergeladen',
-          body: `Version ${version} wird beim Beenden installiert.`
-        }).show()
-      }
+      publishStatus: publishUpdateStatus
     })
-    app.on('before-quit', portableUpdater.installOnExit)
+    updateController = {
+      download: portableUpdater.download,
+      installAndRestart: () => {
+        if (portableUpdater.installAndRestart()) app.quit()
+      }
+    }
   } else {
     const { autoUpdater } = electronUpdater
-    startAutomaticUpdates(autoUpdater, app.isPackaged ? 'install' : 'disabled')
+    updateController = startAutomaticUpdates(
+      autoUpdater,
+      app.isPackaged ? 'install' : 'disabled',
+      publishUpdateStatus
+    )
   }
   void cleanupTimelinePreviewCache()
 

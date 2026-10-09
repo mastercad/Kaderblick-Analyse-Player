@@ -89,6 +89,13 @@ export interface VideoPreparationProgress {
   percent?: number
 }
 
+export type UpdateStatus =
+  | { phase: 'idle' }
+  | { phase: 'available'; version: string }
+  | { phase: 'downloading'; version: string; percent?: number }
+  | { phase: 'downloaded'; version: string }
+  | { phase: 'error'; version?: string; message: string }
+
 export interface TimelinePreviewFileInfo {
   size: number
   mtimeMs: number

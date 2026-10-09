@@ -29,7 +29,11 @@ Object.defineProperty(window, 'desktopApi', {
     storeTimelinePreviewSheet: (): Promise<void> => Promise.resolve(),
     markTimelinePreviewPhaseComplete: (): Promise<void> => Promise.resolve(),
     getTimelinePreviewFrame: (): Promise<null> => Promise.resolve(null),
-    captureScreenshot: (): Promise<{ filePath: string }> => Promise.resolve({ filePath: '/tmp/kaderblick-screenshot.png' })
+    captureScreenshot: (): Promise<{ filePath: string }> => Promise.resolve({ filePath: '/tmp/kaderblick-screenshot.png' }),
+    getUpdateStatus: () => Promise.resolve({ phase: 'idle' as const }),
+    downloadUpdate: () => Promise.resolve(),
+    installUpdateAndRestart: () => Promise.resolve(),
+    onUpdateStatus: () => () => {}
   },
   writable: true,
   configurable: true

@@ -1129,6 +1129,78 @@ select {
   margin-top: 16px;
 }
 
+.update-dialog {
+  display: grid;
+  gap: 18px;
+}
+
+.update-dialog__brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.update-dialog__brand h2 {
+  margin: 0;
+  font-size: clamp(1.35rem, 2vw, 1.75rem);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.update-dialog__mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 15px;
+  background: linear-gradient(135deg, var(--brand), var(--brand-strong));
+  overflow: hidden;
+}
+
+.update-dialog__mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.update-dialog p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.55;
+}
+
+.update-dialog__progress {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--panel-muted-strong);
+}
+
+.update-dialog__progress > div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--brand), var(--accent));
+  transition: width 180ms ease;
+}
+
+.update-dialog__progress-label {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.update-dialog__error {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--danger-soft);
+  color: var(--danger) !important;
+}
+
+.update-dialog__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 /* Session restore dialog: video list */
 .snapshot-video-list {
   list-style: none;

@@ -1,4 +1,4 @@
-import type { AppInfo, AppSettingsExport, CsvFileDescriptor, FilterPreset, ScreenshotSaveResult, TimelinePreviewCacheState, TimelinePreviewFileInfo, TimelinePreviewFrame, TimelinePreviewSheet, VideoFileDescriptor, VideoPreparationProgress } from '../common/types'
+import type { AppInfo, AppSettingsExport, CsvFileDescriptor, FilterPreset, ScreenshotSaveResult, TimelinePreviewCacheState, TimelinePreviewFileInfo, TimelinePreviewFrame, TimelinePreviewSheet, UpdateStatus, VideoFileDescriptor, VideoPreparationProgress } from '../common/types'
 
 export interface DesktopApi {
   pickVideoFile: () => Promise<VideoFileDescriptor | undefined>
@@ -24,6 +24,10 @@ export interface DesktopApi {
   importAppSettings: () => Promise<AppSettingsExport | null>
   onVideoPreparationProgress: (listener: (progress: VideoPreparationProgress) => void) => () => void
   fileExists: (filePath: string) => Promise<boolean>
+  getUpdateStatus: () => Promise<UpdateStatus>
+  downloadUpdate: () => Promise<void>
+  installUpdateAndRestart: () => Promise<void>
+  onUpdateStatus: (listener: (status: UpdateStatus) => void) => () => void
 }
 
 declare global {
