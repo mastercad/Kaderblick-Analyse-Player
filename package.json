@@ -1,6 +1,6 @@
 {
   "name": "kaderblick-analyse-player",
-  "version": "2.9.3",
+  "version": "2.10.0",
   "description": "Desktop player for football video analysis with CSV segments, live filters and team-friendly controls.",
   "desktopName": "de.fussballverein.video-player",
   "main": "out/main/index.js",

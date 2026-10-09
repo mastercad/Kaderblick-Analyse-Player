@@ -1,3 +1,17 @@
+## [2.10.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.9.3...v2.10.0) (2026-10-09)
+
+### Features
+
+* feat(player): improve match timing and perspectives ([8ca19fc](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/8ca19fc005ffd8df320791d296154a432ed15fed))
+
+### Bug Fixes
+
+* fix(test): await fullscreen shortcut feedback ([d402f90](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/d402f90aa7dc9d279665d550c9a6aa2b1d5ca005))
+* fix(ci): pin visual regression environment ([e6491ec](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/e6491ece2c142f44c383373c3672bceea790edb1))
+* fix(ci): apply visual ratio tolerance ([0321ee4](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/0321ee4142271c8beccd6de929116936b6cfb425))
+* fix(ci): tolerate Linux control rasterization ([dbb1775](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/dbb1775a219109adc01d5eb2e1b48de2125af9c0))
+* fix(ci): stabilize Electron visual viewport ([275d571](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/275d571d05c3d532c9fb97ab4fd0c9226daaa814))
+
 ## [2.9.3](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.9.2...v2.9.3) (2026-10-09)
 
 ### Bug Fixes
