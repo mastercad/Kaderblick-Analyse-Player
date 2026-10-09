@@ -108,6 +108,7 @@ test('renders dark mode, splash, perspectives and fullscreen tools without regre
     await expect(page.getByTestId('fullscreen-flyout-shell')).toBeVisible()
     await expect(page.getByLabel('Aktuell verfügbare Zusatzperspektiven')).toBeVisible()
     await page.keyboard.press('Space')
+    await expect(page.getByTestId('fullscreen-keyboard-hud')).toHaveCount(0)
 
     await page.getByRole('button', { name: 'Werkzeuge einblenden' }).click()
     const tools = page.getByTestId('fullscreen-flyout-right-panel')
@@ -116,9 +117,7 @@ test('renders dark mode, splash, perspectives and fullscreen tools without regre
     await page.waitForTimeout(250)
     await assertPanelDoesNotCoverPerspectives(tools, previews)
     await page.addScriptTag({ content: axe.source })
-    await expect(page).toHaveScreenshot('fullscreen-tools-and-perspectives-dark.png', {
-      mask: [page.locator('.fullscreen-keyboard-hud')]
-    })
+    await expect(page).toHaveScreenshot('fullscreen-tools-and-perspectives-dark.png')
 
     const flyouts = [
       { side: 'right', screenshot: undefined },
@@ -142,9 +141,7 @@ test('renders dark mode, splash, perspectives and fullscreen tools without regre
       }, `#fullscreen-flyout-${flyout.side}`)
       expect(contrast.violations, `Kontrastfehler im ${flyout.side}-Flyout`).toEqual([])
       if (flyout.screenshot) {
-        await expect(page).toHaveScreenshot(flyout.screenshot, {
-          mask: [page.locator('.fullscreen-keyboard-hud')]
-        })
+        await expect(page).toHaveScreenshot(flyout.screenshot)
       }
     }
     await assertNoRendererErrors(application)
