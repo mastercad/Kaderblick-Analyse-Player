@@ -1,3 +1,9 @@
+## [2.11.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.10.0...v2.11.0) (2026-10-09)
+
+### Features
+
+* feat(player): derive match time from recording clocks ([98e9b0d](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/98e9b0ded0313a80701a1f5d1e67bbb29870709f))
+
 ## [2.10.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.9.3...v2.10.0) (2026-10-09)
 
 ### Features
