@@ -182,6 +182,11 @@ if (process.platform !== 'linux') {
   process.exit(0)
 }
 
+if (process.env.CI === 'true' && process.env.KADERBLICK_E2E_NO_SANDBOX === '1') {
+  console.log('[electron-sandbox] Einrichtung fuer den isolierten E2E-Container uebersprungen.')
+  process.exit(0)
+}
+
 if (isAppArmorUserNamespaceRestricted()) {
   ensureAppArmorProfile()
 } else if (areUnprivilegedUserNamespacesDisabled()) {

@@ -58,13 +58,7 @@ test('renders dark mode, splash, perspectives and fullscreen tools without regre
     ])
     expect(perspectivePresentation).toEqual(filterPresentation)
     expect(perspectivePresentation).toEqual(fullscreenPresentation)
-    await expect(utilityControls).toHaveScreenshot('inline-utility-buttons-light.png', {
-      // Linux font and native range-control rasterization differs slightly
-      // between the developer desktop and the pinned Ubuntu CI image. Button
-      // geometry and computed presentation are asserted exactly above.
-      maxDiffPixels: 300,
-      maxDiffPixelRatio: 0.025
-    })
+    await expect(utilityControls).toHaveScreenshot('inline-utility-buttons-light.png')
 
     await page.getByRole('button', { name: 'Zu Dark Mode wechseln' }).click()
 
@@ -99,7 +93,7 @@ test('renders dark mode, splash, perspectives and fullscreen tools without regre
     })
 
     await expect(page).toHaveScreenshot('workspace-dark-with-perspectives.png', {
-      mask: [page.locator('.video-stage__video, .perspective-preview video, .timeline__preview')]
+      mask: [page.locator('.timeline__preview')]
     })
 
     await page.getByRole('button', { name: 'Vollbild', exact: true }).click()
@@ -123,7 +117,7 @@ test('renders dark mode, splash, perspectives and fullscreen tools without regre
     await assertPanelDoesNotCoverPerspectives(tools, previews)
     await page.addScriptTag({ content: axe.source })
     await expect(page).toHaveScreenshot('fullscreen-tools-and-perspectives-dark.png', {
-      mask: [page.locator('.video-stage__video, .perspective-preview video, .fullscreen-keyboard-hud')]
+      mask: [page.locator('.fullscreen-keyboard-hud')]
     })
 
     const flyouts = [
@@ -149,7 +143,7 @@ test('renders dark mode, splash, perspectives and fullscreen tools without regre
       expect(contrast.violations, `Kontrastfehler im ${flyout.side}-Flyout`).toEqual([])
       if (flyout.screenshot) {
         await expect(page).toHaveScreenshot(flyout.screenshot, {
-          mask: [page.locator('.video-stage__video, .perspective-preview video, .fullscreen-keyboard-hud')]
+          mask: [page.locator('.fullscreen-keyboard-hud')]
         })
       }
     }

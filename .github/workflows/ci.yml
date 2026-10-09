@@ -57,7 +57,12 @@ jobs:
 
   electron_e2e:
     name: Electron E2E und visuelle Regression
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
+    env:
+      KADERBLICK_E2E_NO_SANDBOX: '1'
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.0-resolute@sha256:c8dca02cb6a444cd5a970bb6378367752b6e5b09d93aabd2c53e381497459135
+      options: --shm-size=1gb
     timeout-minutes: 15
 
     steps:
@@ -67,14 +72,11 @@ jobs:
       - name: Node.js einrichten
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 24.21.0
           cache: npm
 
       - name: Abhängigkeiten installieren
         run: npm ci
-
-      - name: Virtuelle Anzeige installieren
-        run: sudo apt-get update && sudo apt-get install --yes xvfb
 
       - name: Electron E2E ausführen
         run: xvfb-run --auto-servernum npm run test:e2e
