@@ -63,6 +63,13 @@ npm run test:watch
 npm run lint
 ```
 
+Unter Linux richtet das Projekt bei aktivierter AppArmor-Einschränkung einmalig
+ein dauerhaftes Profil für Electron ein. Dafür wird bei der ersten Installation
+oder beim ersten Entwicklungsstart einmal `sudo` benötigt. Danach bleiben
+weitere `npm install`- und `npm ci`-Läufe ohne Passwortabfrage, auch wenn Electron
+seine Dateien in `node_modules` ersetzt. Auf Linux-Systemen ohne diese
+AppArmor-Einschränkung wird bei Bedarf stattdessen die SUID-Sandbox geprüft.
+
 ---
 
 ## Build & Release
