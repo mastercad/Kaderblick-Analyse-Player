@@ -71,6 +71,25 @@ export const parseTimeInput = (input: string): number | null => {
   return null
 }
 
+/**
+ * Parses the player's jump field and also normalizes an overflowing seconds
+ * component. The selected jump mode determines what the resulting time means;
+ * this function only turns an entry such as 45:60 into 46:00.
+ */
+export const parsePlayerJumpTimeInput = (input: string): number | null => {
+  const parsed = parseTimeInput(input)
+  if (parsed !== null) return parsed
+
+  const match = /^(\d+):(\d+(?:[.,]\d+)?)$/.exec(input.trim())
+  if (!match) return null
+
+  const minutes = Number.parseInt(match[1], 10)
+  const seconds = Number.parseFloat(match[2].replace(',', '.'))
+  if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) return null
+
+  return minutes * 60 + seconds
+}
+
 export const parseSegmentsCsv = (csvText: string): Segment[] => {
   const parsed = Papa.parse<SegmentCsvRow>(csvText, {
     header: true,

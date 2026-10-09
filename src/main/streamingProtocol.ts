@@ -22,6 +22,54 @@ export const getVideoMetadata = (filePath: string): CachedVideoMeta | undefined 
 // Receives the ffmpeg binary path from index.ts to avoid circular imports
 let ffmpegBin: (() => string) | undefined
 
+interface StreamingFfmpegOptions {
+  filePath: string
+  startSeconds: number
+  codecName: string
+  preview: boolean
+}
+
+export const buildStreamingFfmpegArgs = ({ filePath, startSeconds, codecName, preview }: StreamingFfmpegOptions): string[] => {
+  if (preview) {
+    return [
+      '-re',
+      ...(startSeconds > 0 ? ['-ss', String(startSeconds)] : []),
+      '-i', filePath,
+      '-map', '0:v:0',
+      '-an',
+      '-vf', 'fps=15,scale=w=640:h=360:force_original_aspect_ratio=decrease:flags=fast_bilinear',
+      '-c:v', 'libx264',
+      '-threads', '2',
+      '-preset', 'ultrafast',
+      '-tune', 'zerolatency',
+      '-crf', '28',
+      '-g', '15',
+      '-keyint_min', '15',
+      '-sc_threshold', '0',
+      '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+      '-f', 'mp4',
+      'pipe:1'
+    ]
+  }
+
+  const needsVideoTranscode = codecName === 'hevc' || codecName === 'h265'
+  return [
+    ...(startSeconds > 0 ? ['-ss', String(startSeconds)] : []),
+    '-i', filePath,
+    '-c:v', needsVideoTranscode ? 'libx264' : 'copy',
+    ...(needsVideoTranscode ? [
+      '-vf', 'scale=w=1920:h=1080:force_original_aspect_ratio=decrease:flags=fast_bilinear',
+      '-preset', 'ultrafast',
+      '-crf', '22'
+    ] : []),
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+    '-f', 'mp4',
+    'pipe:1'
+  ]
+}
+
 export const initStreamingProtocol = (ffmpegExecutableGetter: () => string): void => {
   ffmpegBin = ffmpegExecutableGetter
 }
@@ -41,29 +89,10 @@ export const registerStreamingProtocol = (): void => {
       }
 
       const startSeconds = parseFloat(url.searchParams.get('t') ?? '0') || 0
+      const preview = url.searchParams.get('preview') === '1'
       const meta = metaCache.get(filePath)
       const codecName = meta?.codecName?.toLowerCase() ?? ''
-
-      // HEVC/H.265 cannot be decoded by Chromium on any platform → must transcode to H.264
-      const needsVideoTranscode = codecName === 'hevc' || codecName === 'h265'
-
-      const ffmpegArgs: string[] = [
-        ...(startSeconds > 0 ? ['-ss', String(startSeconds)] : []),
-        '-i', filePath,
-        '-c:v', needsVideoTranscode ? 'libx264' : 'copy',
-        // For HEVC: scale 4K down to 1080p so the real-time H.264 encode stays within
-        // CPU budget. Video analysis does not require 4K resolution.
-        ...(needsVideoTranscode ? [
-          '-vf', 'scale=w=1920:h=1080:force_original_aspect_ratio=decrease:flags=fast_bilinear',
-          '-preset', 'ultrafast',
-          '-crf', '22'
-        ] : []),
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-        '-f', 'mp4',
-        'pipe:1'
-      ]
+      const ffmpegArgs = buildStreamingFfmpegArgs({ filePath, startSeconds, codecName, preview })
 
       const child = registerChildProcess(spawn(ffmpegBin(), ffmpegArgs, { windowsHide: true }))
 

@@ -8,6 +8,7 @@ import {
   matchSegmentsToVideo,
   parseSegmentsCsv,
   parseTimeInput,
+  parsePlayerJumpTimeInput,
   resolveSegmentSequenceStartIndex
 } from './segmentUtils'
 
@@ -178,6 +179,18 @@ describe('segmentUtils', () => {
 
     it('returns null when H:MM:SS has minutes >= 60', () => {
       expect(parseTimeInput('1:60:00')).toBeNull()
+    })
+  })
+
+  describe('parsePlayerJumpTimeInput', () => {
+    it('normalizes overflowing seconds for the player jump field', () => {
+      expect(parsePlayerJumpTimeInput('45:60')).toBe(46 * 60)
+      expect(parsePlayerJumpTimeInput('45:60,5')).toBe(46 * 60 + 0.5)
+    })
+
+    it('continues to reject malformed jump times', () => {
+      expect(parsePlayerJumpTimeInput('45:abc')).toBeNull()
+      expect(parsePlayerJumpTimeInput('-45:60')).toBeNull()
     })
   })
 })

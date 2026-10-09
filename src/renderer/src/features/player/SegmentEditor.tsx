@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { findLoadedVideoForSegment, getBaseName, parseTimeInput, serializeSegmentsToCsv } from '../../../../common/segmentUtils'
+import { getMatchVideoTimeRanges } from '../../../../common/matchTimeUtils'
 import { formatClockTime, formatSegmentTime } from '../../../../common/timeUtils'
 import type { Segment, SegmentEditorDraft, VideoFileDescriptor } from '../../../../common/types'
 
@@ -19,6 +20,40 @@ const newDraftId = (() => {
   let counter = 0
   return () => `draft-${Date.now()}-${++counter}`
 })()
+
+const newTimeRangeId = (() => {
+  let counter = 0
+  return () => `time-range-${Date.now()}-${++counter}`
+})()
+
+interface VideoTimeRangeSetting {
+  id: string
+  matchStartInput: string
+  videoStartInput: string
+  durationInput: string
+}
+
+interface VideoSetting {
+  path: string
+  matchGroupInput: string
+  configured: boolean
+  ranges: VideoTimeRangeSetting[]
+}
+
+const clearVideoMatchTimeMapping = (video: VideoFileDescriptor, matchGroupInput: string): VideoFileDescriptor => {
+  const nextVideo: VideoFileDescriptor = {
+    ...video,
+    matchGroupId: matchGroupInput.trim() || undefined
+  }
+  delete nextVideo.matchHalf
+  delete nextVideo.kickoffVideoSeconds
+  delete nextVideo.matchDurationSeconds
+  delete nextVideo.matchTimeStartSeconds
+  delete nextVideo.matchTimeEndSeconds
+  delete nextVideo.videoTimeStartSeconds
+  delete nextVideo.matchTimeRanges
+  return nextVideo
+}
 
 const segmentToDraft = (segment: Segment, videos: VideoFileDescriptor[]): SegmentEditorDraft => {
   const matchedVideo = findLoadedVideoForSegment(segment, videos)
@@ -103,14 +138,33 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
   })
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [videoSettings, setVideoSettings] = useState(() => videos.map((video) => ({
-    path: video.path,
-    matchGroupInput: video.matchGroupId ?? '',
-    half: video.matchHalf ?? 1,
-    kickoffInput: formatClockTime(video.kickoffVideoSeconds ?? 0),
-    matchDurationInput: formatClockTime(video.matchDurationSeconds ?? 45 * 60)
-  })))
+  const [videoSettings, setVideoSettings] = useState<VideoSetting[]>(() => videos.map((video) => {
+    const ranges = getMatchVideoTimeRanges(videos, video)
+    return {
+      path: video.path,
+      matchGroupInput: video.matchGroupId ?? '',
+      configured: ranges.length > 0,
+      ranges: (ranges.length > 0 ? ranges : [{
+        matchStartSeconds: 0,
+        matchEndSeconds: 45 * 60,
+        videoStartSeconds: 0,
+        videoEndSeconds: 45 * 60
+      }]).map((range) => ({
+        id: range.id ?? newTimeRangeId(),
+        matchStartInput: formatSegmentTime(range.matchStartSeconds),
+        videoStartInput: formatSegmentTime(range.videoStartSeconds),
+        durationInput: formatSegmentTime(range.matchEndSeconds - range.matchStartSeconds)
+      }))
+    }
+  }))
   const containerRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null)
+  const [editorOffset, setEditorOffset] = useState({ x: 0, y: 0 })
+  const [openVideoSettings, setOpenVideoSettings] = useState<Set<string>>(() => new Set(
+    videos
+      .filter((video) => video.path === activeVideoPath || videos.length === 1)
+      .map((video) => video.path)
+  ))
 
   useEffect(() => {
     onDraftsChange?.(drafts)
@@ -200,56 +254,132 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
     }
   })
   const totalSegmentDurationSeconds = durationByVideo.reduce((total, summary) => total + summary.durationSeconds, 0)
-  const updateVideoSetting = (path: string, changes: Partial<(typeof videoSettings)[number]>) => {
-    let nextSettings = videoSettings.map((setting) => setting.path === path ? { ...setting, ...changes } : setting)
-    const changedSetting = nextSettings.find((setting) => setting.path === path)
-    const changedGroupId = changedSetting?.matchGroupInput.trim() ?? ''
+  const getRangeValues = (range: VideoTimeRangeSetting) => {
+    const matchStartSeconds = parseTimeInput(range.matchStartInput)
+    const videoStartSeconds = parseTimeInput(range.videoStartInput)
+    const durationSeconds = parseTimeInput(range.durationInput)
+    if (matchStartSeconds === null || videoStartSeconds === null || durationSeconds === null || durationSeconds <= 0) return null
+    return { matchStartSeconds, videoStartSeconds, durationSeconds }
+  }
 
-    // A game's half duration is shared by all of its videos. When a video is
-    // assigned to an existing game, adopt that game's duration. Editing the
-    // duration afterwards updates both halves together while kickoff positions
-    // remain independent per video.
-    if (changedSetting && 'matchGroupInput' in changes && changedGroupId) {
-      const existingGroupSetting = videoSettings.find((setting) =>
-        setting.path !== path && setting.matchGroupInput.trim() === changedGroupId
-      )
-      if (existingGroupSetting) {
-        nextSettings = nextSettings.map((setting) => setting.path === path
-          ? { ...setting, matchDurationInput: existingGroupSetting.matchDurationInput }
-          : setting)
-      }
-    }
-    if (changedSetting && 'matchDurationInput' in changes && changedGroupId) {
-      nextSettings = nextSettings.map((setting) => setting.matchGroupInput.trim() === changedGroupId
-        ? { ...setting, matchDurationInput: changedSetting.matchDurationInput }
-        : setting)
-    }
+  const commitVideoSettings = (nextSettings: VideoSetting[]): void => {
     setVideoSettings(nextSettings)
-    if (nextSettings.some((setting) => {
-      const kickoff = parseTimeInput(setting.kickoffInput)
-      const duration = parseTimeInput(setting.matchDurationInput)
-      return kickoff === null || duration === null || duration <= 0
-    })) {
-      return
-    }
+    const parsedSettings = nextSettings.map((setting) => ({
+      ...setting,
+      parsedRanges: setting.ranges.map((range) => ({ id: range.id, values: getRangeValues(range) }))
+    }))
     onVideoSettingsChange?.(videos.map((video) => {
-      const setting = nextSettings.find((candidate) => candidate.path === video.path)
-      return setting ? {
+      const setting = parsedSettings.find((candidate) => candidate.path === video.path)
+      if (!setting) return video
+      if (!setting.configured) return clearVideoMatchTimeMapping(video, setting.matchGroupInput)
+      if (setting.parsedRanges.some((range) => range.values === null)) {
+        return { ...video, matchGroupId: setting.matchGroupInput.trim() || undefined }
+      }
+      const matchTimeRanges = setting.parsedRanges.map(({ id, values }) => ({
+        id,
+        matchStartSeconds: values!.matchStartSeconds,
+        matchEndSeconds: values!.matchStartSeconds + values!.durationSeconds,
+        videoStartSeconds: values!.videoStartSeconds,
+        videoEndSeconds: values!.videoStartSeconds + values!.durationSeconds
+      }))
+      const firstRange = matchTimeRanges[0]
+      return {
         ...video,
         matchGroupId: setting.matchGroupInput.trim() || undefined,
-        matchHalf: setting.half as 1 | 2,
-        kickoffVideoSeconds: parseTimeInput(setting.kickoffInput)!,
-        matchDurationSeconds: parseTimeInput(setting.matchDurationInput)!
-      } : video
+        matchTimeRanges,
+        matchTimeStartSeconds: firstRange.matchStartSeconds,
+        matchTimeEndSeconds: firstRange.matchEndSeconds,
+        videoTimeStartSeconds: firstRange.videoStartSeconds,
+        // Keep the established fields populated so restored sessions and older
+        // exports remain compatible with the generalized time mapping.
+        kickoffVideoSeconds: firstRange.videoStartSeconds,
+        matchDurationSeconds: firstRange.matchEndSeconds - firstRange.matchStartSeconds
+      }
     }))
     setErrorMessage(null)
   }
 
+  const updateVideoGroup = (path: string, matchGroupInput: string): void => {
+    commitVideoSettings(videoSettings.map((setting) => setting.path === path ? { ...setting, matchGroupInput } : setting))
+  }
+
+  const updateTimeRange = (path: string, rangeId: string, changes: Partial<VideoTimeRangeSetting>): void => {
+    commitVideoSettings(videoSettings.map((setting) => setting.path === path ? {
+      ...setting,
+      configured: true,
+      ranges: setting.ranges.map((range) => range.id === rangeId ? { ...range, ...changes } : range)
+    } : setting))
+  }
+
+  const addTimeRange = (path: string): void => {
+    const setting = videoSettings.find((candidate) => candidate.path === path)
+    const previous = setting?.ranges.at(-1)
+    const previousValues = previous ? getRangeValues(previous) : null
+    const nextMatchStart = previousValues
+      ? formatSegmentTime(previousValues.matchStartSeconds + previousValues.durationSeconds)
+      : '00:00'
+    const nextVideoStart = previousValues
+      ? formatSegmentTime(previousValues.videoStartSeconds + previousValues.durationSeconds)
+      : '00:00'
+    commitVideoSettings(videoSettings.map((candidate) => candidate.path === path ? {
+      ...candidate,
+      configured: true,
+      ranges: [...candidate.ranges, {
+        id: newTimeRangeId(),
+        matchStartInput: nextMatchStart,
+        videoStartInput: nextVideoStart,
+        durationInput: '45:00'
+      }]
+    } : candidate))
+  }
+
+  const removeTimeRange = (path: string, rangeId: string): void => {
+    const setting = videoSettings.find((candidate) => candidate.path === path)
+    if (!setting || setting.ranges.length <= 1) return
+    commitVideoSettings(videoSettings.map((candidate) => candidate.path === path
+      ? { ...candidate, ranges: candidate.ranges.filter((range) => range.id !== rangeId) }
+      : candidate))
+  }
+
+  const removeVideoTimeMapping = (path: string): void => {
+    commitVideoSettings(videoSettings.map((setting) => setting.path === path
+      ? { ...setting, configured: false }
+      : setting))
+  }
+
+  const handleEditorDragStart = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: editorOffset.x,
+      originY: editorOffset.y
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const handleEditorDragMove = (event: React.PointerEvent<HTMLDivElement>): void => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    setEditorOffset({
+      x: drag.originX + event.clientX - drag.startX,
+      y: drag.originY + event.clientY - drag.startY
+    })
+  }
+
+  const handleEditorDragEnd = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (dragRef.current?.pointerId !== event.pointerId) return
+    dragRef.current = null
+    event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
   return (
     <div className="segment-editor-overlay" role="dialog" aria-modal="true" aria-label="Segment-Editor">
-      <div className="segment-editor" ref={containerRef}>
-        <div className="segment-editor__header">
+      <div className="segment-editor" ref={containerRef} style={{ transform: `translate(${editorOffset.x}px, ${editorOffset.y}px)` }}>
+        <div className="segment-editor__header" onPointerDown={handleEditorDragStart} onPointerMove={handleEditorDragMove} onPointerUp={handleEditorDragEnd} onPointerCancel={handleEditorDragEnd}>
           <h2 className="segment-editor__title">Segment-Editor</h2>
+          <span className="segment-editor__drag-hint" aria-hidden="true">↕ Kopfzeile ziehen, um das Fenster zu verschieben</span>
           <button className="button button--subtle segment-editor__close" onClick={handleClose} aria-label="Schließen">
             ✕
           </button>
@@ -258,43 +388,90 @@ export function SegmentEditor({ videos, activeVideoPath, initialSegments, initia
         <div className="segment-editor__body">
           <section className="segment-editor__match-settings" aria-labelledby="match-settings-title">
             <div>
-              <h3 id="match-settings-title">Video-Zeitzuordnung</h3>
-              <p>Ordne zusammengehörige Halbzeiten einem Spiel zu und lege deren Zeitachsen fest.</p>
+              <h3 id="match-settings-title">Spielzeit im Video festlegen</h3>
+              <details className="segment-editor__time-help">
+                <summary>Kurze Anleitung</summary>
+                <p>Spule das Video bis zum Anstoß und klicke auf <strong>Aktuelle Videoposition einsetzen</strong>. Für eine normale erste Halbzeit bleiben Spieluhr und Dauer auf 00:00 und 45:00.</p>
+                <p>Enthält dasselbe Video noch eine zweite Halbzeit oder wurde die Aufnahme unterbrochen, füge dafür einen weiteren Spielabschnitt hinzu.</p>
+              </details>
             </div>
             {videoSettings.map((setting) => {
               const video = videos.find((candidate) => candidate.path === setting.path)
               return (
-                <div className="segment-editor__match-row" key={setting.path}>
-                  <strong title={setting.path}>{video?.fileName ?? setting.path}</strong>
-                  <label>
-                    Spiel
-                    <input
-                      aria-label={`Spiel für ${video?.fileName ?? setting.path}`}
-                      value={setting.matchGroupInput}
-                      placeholder="z. B. Spiel 1"
-                      onChange={(event) => updateVideoSetting(setting.path, { matchGroupInput: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Halbzeit
-                    <select aria-label={`Halbzeit für ${video?.fileName ?? setting.path}`} value={setting.half} onChange={(event) => updateVideoSetting(setting.path, { half: Number(event.target.value) as 1 | 2 })}>
-                      <option value={1}>1. Halbzeit</option>
-                      <option value={2}>2. Halbzeit</option>
-                    </select>
-                  </label>
-                  <label>
-                    Spielstart
-                    <input aria-label={`Spielstart für ${video?.fileName ?? setting.path}`} value={setting.kickoffInput} placeholder="z. B. 02:41" onChange={(event) => updateVideoSetting(setting.path, { kickoffInput: event.target.value })} />
-                  </label>
-                  <label>
-                    Länge
-                    <input aria-label={`Länge für ${video?.fileName ?? setting.path}`} value={setting.matchDurationInput} placeholder="45:00" onChange={(event) => updateVideoSetting(setting.path, { matchDurationInput: event.target.value })} />
-                  </label>
-                  <button className="button button--subtle" type="button" disabled={activeVideoPath !== undefined && activeVideoPath !== setting.path} title={activeVideoPath !== undefined && activeVideoPath !== setting.path ? 'Dafür zuerst dieses Video im Player auswählen' : 'Aktuelle Position des Players übernehmen'} onClick={() => updateVideoSetting(setting.path, { kickoffInput: formatClockTime(getCurrentTime()) })}>Aktuelle Position</button>
-                </div>
+                <details
+                  className="segment-editor__match-row"
+                  key={setting.path}
+                  open={openVideoSettings.has(setting.path)}
+                  onToggle={(event) => {
+                    const isOpen = event.currentTarget.open
+                    setOpenVideoSettings((current) => {
+                      if (current.has(setting.path) === isOpen) return current
+                      const next = new Set(current)
+                      if (isOpen) next.add(setting.path)
+                      else next.delete(setting.path)
+                      return next
+                    })
+                  }}
+                >
+                  <summary>
+                    <strong title={setting.path}>{video?.fileName ?? setting.path}</strong>
+                    <span>{setting.configured ? `${setting.ranges.length} ${setting.ranges.length === 1 ? 'Spielabschnitt' : 'Spielabschnitte'}` : 'Noch nicht eingerichtet'}</span>
+                    <span>{setting.matchGroupInput.trim() || 'Kein Spielname'}</span>
+                  </summary>
+                  <div className="segment-editor__match-row-body">
+                    <label className="segment-editor__match-name">
+                      Spielname für zusammengehörige Aufnahmen (optional)
+                      <input
+                        aria-label={`Spiel für ${video?.fileName ?? setting.path}`}
+                        value={setting.matchGroupInput}
+                        placeholder="z. B. Heimspiel gegen Musterstadt"
+                        onChange={(event) => updateVideoGroup(setting.path, event.target.value)}
+                      />
+                    </label>
+                    {setting.ranges.map((range, rangeIndex) => {
+                      const values = getRangeValues(range)
+                      const name = video?.fileName ?? setting.path
+                      return (
+                        <div className="segment-editor__time-range" key={range.id}>
+                          <div className="segment-editor__time-range-heading">
+                            <strong>Spielabschnitt {rangeIndex + 1}</strong>
+                            <div className="segment-editor__time-presets" aria-label={`Vorlagen für Spielabschnitt ${rangeIndex + 1}`}>
+                              <span>Vorlage:</span>
+                              <button type="button" onClick={() => updateTimeRange(setting.path, range.id, { matchStartInput: '00:00', durationInput: '45:00' })}>1. Halbzeit</button>
+                              <button type="button" onClick={() => updateTimeRange(setting.path, range.id, { matchStartInput: '45:00', durationInput: '45:00' })}>2. Halbzeit</button>
+                            </div>
+                          </div>
+                          <div className="segment-editor__time-range-fields">
+                            <label>
+                              Anstoß/Wiederbeginn im Video
+                              <div className="segment-editor__video-position-field">
+                                <input aria-label={`Anstoß oder Wiederbeginn im Video für Spielabschnitt ${rangeIndex + 1} von ${name}`} value={range.videoStartInput} onChange={(event) => updateTimeRange(setting.path, range.id, { videoStartInput: event.target.value })} />
+                                <button className="button button--subtle" type="button" aria-label={`Aktuelle Videoposition einsetzen für Spielabschnitt ${rangeIndex + 1} von ${name}`} disabled={activeVideoPath !== undefined && activeVideoPath !== setting.path} title={activeVideoPath !== undefined && activeVideoPath !== setting.path ? 'Dafür zuerst dieses Video im Player auswählen' : undefined} onClick={() => updateTimeRange(setting.path, range.id, { videoStartInput: formatSegmentTime(getCurrentTime()) })}>Aktuelle Videoposition einsetzen</button>
+                              </div>
+                            </label>
+                            <label>Spieluhr startet bei<input aria-label={`Spieluhr startet bei für Spielabschnitt ${rangeIndex + 1} von ${name}`} value={range.matchStartInput} onChange={(event) => updateTimeRange(setting.path, range.id, { matchStartInput: event.target.value })} /></label>
+                            <label>Dauer des Spielabschnitts<input aria-label={`Dauer des Spielabschnitts ${rangeIndex + 1} von ${name}`} value={range.durationInput} onChange={(event) => updateTimeRange(setting.path, range.id, { durationInput: event.target.value })} /></label>
+                          </div>
+                          <div className="segment-editor__time-range-result">
+                            {!setting.configured
+                              ? 'Noch nicht zugeordnet. Ändere eine Zeit oder wähle eine Halbzeit-Vorlage.'
+                              : values
+                              ? `Ergebnis: Im Video ${formatSegmentTime(values.videoStartSeconds)}–${formatSegmentTime(values.videoStartSeconds + values.durationSeconds)} läuft die Spieluhr von ${formatSegmentTime(values.matchStartSeconds)} bis ${formatSegmentTime(values.matchStartSeconds + values.durationSeconds)}.`
+                              : 'Bitte drei gültige Zeiten eingeben.'}
+                          </div>
+                          <button className="button button--subtle segment-editor__remove-time-range" type="button" disabled={setting.ranges.length <= 1} onClick={() => removeTimeRange(setting.path, range.id)}>Spielabschnitt entfernen</button>
+                        </div>
+                      )
+                    })}
+                    <button className="button button--subtle segment-editor__add-time-range" type="button" onClick={() => addTimeRange(setting.path)}>Weiteren Spielabschnitt hinzufügen</button>
+                    {setting.configured ? (
+                      <button className="button button--subtle segment-editor__clear-time-mapping" type="button" onClick={() => removeVideoTimeMapping(setting.path)}>Spielzeit-Zuordnung entfernen</button>
+                    ) : null}
+                  </div>
+                </details>
               )
             })}
-            <span className="segment-editor__autosave-hint">Gültige Änderungen werden sofort übernommen.</span>
+            <span className="segment-editor__autosave-hint">Jedes Video wird unabhängig gespeichert, sobald seine drei Zeiten gültig sind. Unberührte Videos erhalten keine automatische Zuordnung.</span>
           </section>
 
           <section className="segment-editor__duration-summary" aria-labelledby="segment-duration-summary-title">

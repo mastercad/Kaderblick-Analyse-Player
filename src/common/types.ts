@@ -47,6 +47,14 @@ export interface FilterPreset {
   builtIn: boolean
 }
 
+export interface VideoMatchTimeRange {
+  id: string
+  videoStartSeconds: number
+  videoEndSeconds: number
+  matchStartSeconds: number
+  matchEndSeconds: number
+}
+
 export interface VideoFileDescriptor {
   path: string
   fileName: string
@@ -63,6 +71,10 @@ export interface VideoFileDescriptor {
   matchHalf?: 1 | 2
   kickoffVideoSeconds?: number
   matchDurationSeconds?: number
+  matchTimeStartSeconds?: number
+  matchTimeEndSeconds?: number
+  videoTimeStartSeconds?: number
+  matchTimeRanges?: VideoMatchTimeRange[]
 }
 
 export type PlayerJumpTimeMode =

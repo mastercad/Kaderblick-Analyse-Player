@@ -10,6 +10,11 @@ const selectedVideo = {
   playbackMode: 'direct' as const
 }
 
+const finishFullscreenSplash = (): void => {
+  const video = document.querySelector('video')
+  if (video) act(() => { fireEvent.play(video) })
+}
+
 describe('VideoWorkspace', () => {
   it.each([
     { storedStart: 54 * 60 + 45, storedEnd: 56 * 60, expected: '54:45 bis 56:00' },
@@ -119,6 +124,10 @@ describe('VideoWorkspace', () => {
     const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
     act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    finishFullscreenSplash()
+
+    const infoPanel = document.getElementById('fullscreen-flyout-top')!
+    expect(within(infoPanel).queryByText('Zusatzperspektiven')).not.toBeInTheDocument()
 
     const toolsTrigger = screen.getByRole('button', { name: 'Werkzeuge einblenden' })
     const toolsPanel = screen.getByTestId('fullscreen-flyout-right-panel')
@@ -127,6 +136,21 @@ describe('VideoWorkspace', () => {
     expect(toolsTrigger).toHaveAttribute('aria-pressed', 'false')
     expect(toolsTrigger).not.toHaveClass('fullscreen-edge-trigger--pinned')
     expect(toolsPanel).not.toHaveAttribute('inert')
+    expect(within(toolsPanel).getByText('Perspektiven')).toBeInTheDocument()
+    expect(within(toolsPanel).queryByText('Segment endlos wiederholen')).not.toBeInTheDocument()
+
+    fireEvent.click(within(toolsPanel).getByText('Perspektiven'))
+    expect(within(toolsPanel).getByText('Keine weiteren Videos dieses Spiels geladen.')).toBeInTheDocument()
+
+    const viewport = screen.getByTestId('video-zoom-viewport')
+    vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 800, bottom: 450, width: 800, height: 450,
+      toJSON: () => ({})
+    } as DOMRect)
+    act(() => { fireEvent(window, new Event('resize')) })
+    fireEvent.click(within(toolsPanel).getByRole('button', { name: 'Zoom vergroessern' }))
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Zoom vergrößert')
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('1.25×')
 
     fireEvent.mouseLeave(toolsTrigger)
     fireEvent.mouseEnter(toolsPanel)
@@ -155,6 +179,7 @@ describe('VideoWorkspace', () => {
     const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
     act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    finishFullscreenSplash()
 
     fireEvent.click(screen.getByRole('button', { name: 'Werkzeuge einblenden' }))
 
@@ -162,6 +187,48 @@ describe('VideoWorkspace', () => {
     expect(pinnedTrigger).toHaveAttribute('aria-pressed', 'true')
     expect(pinnedTrigger).toHaveClass('fullscreen-edge-trigger--pinned')
     expect(pinnedTrigger.querySelector('.fullscreen-edge-trigger__pin')).toBeInTheDocument()
+  })
+
+  it('shows and changes the shared time interpretation in fullscreen info', () => {
+    const onJumpTimeModeChange = vi.fn()
+    render(
+      <VideoWorkspace
+        selectedVideo={{
+          ...selectedVideo,
+          matchGroupId: 'Spiel 1',
+          durationSeconds: 50 * 60,
+          matchTimeRanges: [{ id: 'first', videoStartSeconds: 3 * 60, videoEndSeconds: 48 * 60, matchStartSeconds: 0, matchEndSeconds: 45 * 60 }]
+        }}
+        jumpTimeMode="match-cumulative"
+        onJumpTimeModeChange={onJumpTimeModeChange}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
+    act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    finishFullscreenSplash()
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Info einblenden' }))
+
+    const infoPanel = document.getElementById('fullscreen-flyout-top')!
+    const toolsPanel = screen.getByTestId('fullscreen-flyout-right-panel')
+    const modeSelect = within(infoPanel).getByRole('combobox', { name: 'Zeitbezug für Segmente und Sprungziele' })
+    expect(modeSelect).toHaveValue('match-cumulative')
+    expect(within(infoPanel).getByText(/Gespeicherte Segmentzeiten und Eingaben bei „Springe zu Zeit“/)).toHaveTextContent('entspricht der Spieluhr')
+    expect(within(toolsPanel).queryByRole('combobox', { name: 'Zeitbezug für Segmente und Sprungziele' })).not.toBeInTheDocument()
+
+    fireEvent.change(modeSelect, { target: { value: 'match-per-part' } })
+    expect(onJumpTimeModeChange).toHaveBeenCalledWith('match-per-part')
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Zeitbezug geändert')
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Spielzeit – je Halbzeit/Teil')
   })
 
   it('offers segment repeat directly in the fullscreen playback toolbar', () => {
@@ -186,6 +253,7 @@ describe('VideoWorkspace', () => {
     const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
     act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    finishFullscreenSplash()
 
     const controlsTrigger = screen.getByRole('button', { name: 'Wiedergabe und Timeline einblenden' })
     fireEvent.mouseEnter(controlsTrigger)
@@ -218,16 +286,17 @@ describe('VideoWorkspace', () => {
     const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
     act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    finishFullscreenSplash()
     fireEvent.mouseEnter(screen.getByRole('button', { name: 'Wiedergabe und Timeline einblenden' }))
 
     const controlsPanel = document.getElementById('fullscreen-flyout-bottom')!
-    const kickoffButton = within(controlsPanel).getByRole('button', { name: 'Zum Anstoß springen' })
-    expect(kickoffButton).toHaveAttribute('title', 'Zum Anstoß springen (A)')
+    const kickoffButton = within(controlsPanel).getByRole('button', { name: 'Zum Beginn der Zeitzuordnung springen' })
+    expect(kickoffButton).toHaveAttribute('title', 'Zum Beginn der Zeitzuordnung springen (A)')
     expect(kickoffButton).toHaveTextContent('A')
 
     fireEvent.click(kickoffButton)
     expect(video.currentTime).toBe(47)
-    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Anstoß')
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Beginn der Zeitzuordnung')
     expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Spielzeit 45:00')
   })
 
@@ -259,6 +328,7 @@ describe('VideoWorkspace', () => {
     const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
     act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    finishFullscreenSplash()
 
     const segmentTrigger = screen.getByRole('button', { name: 'Segmente einblenden' })
     fireEvent.mouseEnter(segmentTrigger)
@@ -290,6 +360,8 @@ describe('VideoWorkspace', () => {
     const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
     act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    finishFullscreenSplash()
+    act(() => { fireEvent.pause(video) })
 
     const controlsTrigger = screen.getByRole('button', { name: 'Wiedergabe und Timeline einblenden' })
     fireEvent.click(controlsTrigger)
@@ -397,6 +469,286 @@ describe('VideoWorkspace', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('normalizes 45:60 and switches from the first to the second video', () => {
+    const firstHalf = {
+      ...selectedVideo,
+      path: '/tmp/spiel1-hz1.mp4',
+      fileName: 'spiel1-hz1.mp4',
+      durationSeconds: 55 * 60,
+      matchGroupId: 'Spiel 1',
+      matchHalf: 1 as const,
+      kickoffVideoSeconds: 2 * 60,
+      matchDurationSeconds: 45 * 60
+    }
+    const secondHalf = {
+      ...selectedVideo,
+      path: '/tmp/spiel1-hz2.mp4',
+      fileName: 'spiel1-hz2.mp4',
+      durationSeconds: 55 * 60,
+      matchGroupId: 'Spiel 1',
+      matchHalf: 2 as const,
+      kickoffVideoSeconds: 3 * 60,
+      matchDurationSeconds: 45 * 60
+    }
+    const onMatchVideoSeek = vi.fn()
+
+    render(
+      <VideoWorkspace
+        selectedVideo={firstHalf}
+        matchVideos={[firstHalf, secondHalf]}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+        onMatchVideoSeek={onMatchVideoSeek}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    fireEvent.change(screen.getByLabelText(/Springe zu Zeit/), { target: { value: '45:60' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Springen' }))
+
+    expect(onMatchVideoSeek).toHaveBeenCalledWith(secondHalf, 4 * 60)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('treats exactly 45:00 as the beginning of the second half in continuous match time', () => {
+    const firstHalf = {
+      ...selectedVideo,
+      path: '/tmp/spiel1-hz1.mp4', fileName: 'spiel1-hz1.mp4', durationSeconds: 55 * 60,
+      matchGroupId: 'Spiel 1', matchHalf: 1 as const,
+      kickoffVideoSeconds: 4 * 60 + 14, matchDurationSeconds: 45 * 60
+    }
+    const secondHalf = {
+      ...selectedVideo,
+      path: '/tmp/spiel1-hz2.mp4', fileName: 'spiel1-hz2.mp4', durationSeconds: 55 * 60,
+      matchGroupId: 'Spiel 1', matchHalf: 2 as const,
+      kickoffVideoSeconds: 3 * 60 + 20, matchDurationSeconds: 45 * 60
+    }
+    const onMatchVideoSeek = vi.fn()
+
+    render(
+      <VideoWorkspace
+        selectedVideo={firstHalf}
+        matchVideos={[firstHalf, secondHalf]}
+        jumpTimeMode="match-cumulative"
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+        onMatchVideoSeek={onMatchVideoSeek}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    fireEvent.change(screen.getByLabelText(/Springe zu Zeit/), { target: { value: '45:00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Springen' }))
+
+    expect(onMatchVideoSeek).toHaveBeenCalledWith(secondHalf, 3 * 60 + 20)
+    expect(onMatchVideoSeek).not.toHaveBeenCalledWith(firstHalf, 49 * 60 + 14)
+  })
+
+  it('jumps to 45:60 across two 45-minute videos even when both have the same half assignment', () => {
+    const firstVideo = {
+      ...selectedVideo,
+      path: '/tmp/first-part.mp4', fileName: 'first-part.mp4', durationSeconds: 55 * 60,
+      matchHalf: 1 as const, kickoffVideoSeconds: 2 * 60, matchDurationSeconds: 45 * 60
+    }
+    const secondVideo = {
+      ...selectedVideo,
+      path: '/tmp/second-part.mp4', fileName: 'second-part.mp4', durationSeconds: 52 * 60,
+      matchHalf: 1 as const, kickoffVideoSeconds: 3 * 60, matchDurationSeconds: 45 * 60
+    }
+    const onMatchVideoSeek = vi.fn()
+
+    render(
+      <VideoWorkspace
+        selectedVideo={firstVideo}
+        matchVideos={[firstVideo, secondVideo]}
+        jumpTimeMode="match-cumulative"
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+        onMatchVideoSeek={onMatchVideoSeek}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    fireEvent.change(screen.getByLabelText(/Springe zu Zeit/), { target: { value: '45:60' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Springen' }))
+
+    expect(onMatchVideoSeek).toHaveBeenCalledWith(secondVideo, 4 * 60)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('rejects 47:00 in match-per-part mode when the configured part lasts 45 minutes', () => {
+    const video = {
+      ...selectedVideo,
+      durationSeconds: 55 * 60,
+      matchHalf: 1 as const,
+      kickoffVideoSeconds: 2 * 60,
+      matchDurationSeconds: 45 * 60
+    }
+
+    render(
+      <VideoWorkspace
+        selectedVideo={video}
+        matchVideos={[video]}
+        jumpTimeMode="match-per-part"
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const videoElement = document.querySelector('video')!
+    Object.defineProperty(videoElement, 'duration', { configurable: true, value: 55 * 60 })
+    fireEvent.loadedMetadata(videoElement)
+    fireEvent.change(screen.getByLabelText(/Springe zu Zeit/), { target: { value: '47:00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Springen' }))
+
+    expect(videoElement.currentTime).toBe(0)
+    expect(screen.getByRole('alert')).toHaveTextContent('Für diese Zeit wurde kein passendes Video gefunden.')
+  })
+
+  it('jumps to 47:00 in the current file in video-per-file mode', () => {
+    const video = {
+      ...selectedVideo,
+      durationSeconds: 55 * 60,
+      matchHalf: 1 as const,
+      kickoffVideoSeconds: 2 * 60,
+      matchDurationSeconds: 45 * 60
+    }
+
+    render(
+      <VideoWorkspace
+        selectedVideo={video}
+        matchVideos={[video]}
+        jumpTimeMode="video-per-file"
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const videoElement = document.querySelector('video')!
+    Object.defineProperty(videoElement, 'duration', { configurable: true, value: 55 * 60 })
+    fireEvent.loadedMetadata(videoElement)
+    fireEvent.change(screen.getByLabelText(/Springe zu Zeit/), { target: { value: '47:00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Springen' }))
+
+    expect(videoElement.currentTime).toBe(47 * 60)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('switches to the corresponding file for 47:00 in video-cumulative mode', () => {
+    const firstVideo = {
+      ...selectedVideo,
+      path: '/tmp/video-1.mp4',
+      fileName: 'video-1.mp4',
+      durationSeconds: 45 * 60,
+      matchGroupId: 'Spiel 1'
+    }
+    const secondVideo = {
+      ...selectedVideo,
+      path: '/tmp/video-2.mp4',
+      fileName: 'video-2.mp4',
+      durationSeconds: 55 * 60,
+      matchGroupId: 'Spiel 1'
+    }
+    const onMatchVideoSeek = vi.fn()
+
+    render(
+      <VideoWorkspace
+        selectedVideo={firstVideo}
+        matchVideos={[firstVideo, secondVideo]}
+        jumpTimeMode="video-cumulative"
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+        onMatchVideoSeek={onMatchVideoSeek}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    fireEvent.change(screen.getByLabelText(/Springe zu Zeit/), { target: { value: '47:00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Springen' }))
+
+    expect(onMatchVideoSeek).toHaveBeenCalledWith(secondVideo, 2 * 60)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('switches to the corresponding part for 47:00 in match-cumulative mode', () => {
+    const firstHalf = {
+      ...selectedVideo,
+      path: '/tmp/half-1.mp4',
+      fileName: 'half-1.mp4',
+      durationSeconds: 55 * 60,
+      matchGroupId: 'Spiel 1',
+      matchHalf: 1 as const,
+      kickoffVideoSeconds: 2 * 60,
+      matchDurationSeconds: 45 * 60
+    }
+    const secondHalf = {
+      ...selectedVideo,
+      path: '/tmp/half-2.mp4',
+      fileName: 'half-2.mp4',
+      durationSeconds: 55 * 60,
+      matchGroupId: 'Spiel 1',
+      matchHalf: 2 as const,
+      kickoffVideoSeconds: 3 * 60,
+      matchDurationSeconds: 45 * 60
+    }
+    const onMatchVideoSeek = vi.fn()
+
+    render(
+      <VideoWorkspace
+        selectedVideo={firstHalf}
+        matchVideos={[firstHalf, secondHalf]}
+        jumpTimeMode="match-cumulative"
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+        onMatchVideoSeek={onMatchVideoSeek}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    fireEvent.change(screen.getByLabelText(/Springe zu Zeit/), { target: { value: '47:00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Springen' }))
+
+    expect(onMatchVideoSeek).toHaveBeenCalledWith(secondHalf, 5 * 60)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('applies a pending match-time seek after the target video has loaded', () => {
     const onSeekOnLoadApplied = vi.fn()
     render(
@@ -444,6 +796,7 @@ describe('VideoWorkspace', () => {
     const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
     act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    finishFullscreenSplash()
 
     fireEvent.keyDown(window, { code: 'ArrowRight', key: 'ArrowRight', shiftKey: true })
     const hud = screen.getByTestId('fullscreen-keyboard-hud')
@@ -453,6 +806,76 @@ describe('VideoWorkspace', () => {
     act(() => { vi.advanceTimersByTime(1500) })
     expect(screen.queryByTestId('fullscreen-keyboard-hud')).not.toBeInTheDocument()
     vi.useRealTimers()
+  })
+
+  it('switches videos with Ctrl+Arrow and shows the selected filename in the fullscreen HUD', () => {
+    const firstVideo = { ...selectedVideo, path: '/tmp/first.mp4', fileName: 'first.mp4' }
+    const currentVideo = { ...selectedVideo, path: '/tmp/current.mp4', fileName: 'current.mp4' }
+    const nextVideo = { ...selectedVideo, path: '/tmp/next.mp4', fileName: 'next.mp4' }
+    const onMatchVideoSeek = vi.fn()
+
+    render(
+      <VideoWorkspace
+        selectedVideo={currentVideo}
+        matchVideos={[firstVideo, currentVideo, nextVideo]}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+        onMatchVideoSeek={onMatchVideoSeek}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
+    act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    finishFullscreenSplash()
+
+    fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft', ctrlKey: true })
+    expect(onMatchVideoSeek).toHaveBeenLastCalledWith(firstVideo, 0)
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Video gewechselt')
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('first.mp4')
+
+    fireEvent.keyDown(window, { code: 'ArrowRight', key: 'ArrowRight', ctrlKey: true })
+    expect(onMatchVideoSeek).toHaveBeenLastCalledWith(nextVideo, 0)
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('next.mp4')
+  })
+
+  it('keeps the current video and reports the list boundary for Ctrl+Arrow', () => {
+    const onMatchVideoSeek = vi.fn()
+
+    render(
+      <VideoWorkspace
+        selectedVideo={selectedVideo}
+        matchVideos={[selectedVideo]}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+        onMatchVideoSeek={onMatchVideoSeek}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
+    act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    finishFullscreenSplash()
+
+    fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft', ctrlKey: true })
+    expect(onMatchVideoSeek).not.toHaveBeenCalled()
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Kein vorheriges Video')
+
+    fireEvent.keyDown(window, { code: 'ArrowRight', key: 'ArrowRight', ctrlKey: true })
+    expect(onMatchVideoSeek).not.toHaveBeenCalled()
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Kein nächstes Video')
   })
 
   it('shows fullscreen feedback for every state-toggle shortcut', () => {
@@ -486,6 +909,7 @@ describe('VideoWorkspace', () => {
     const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
     act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    finishFullscreenSplash()
 
     fireEvent.keyDown(window, { code: 'KeyN', key: 'n' })
     expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Segmentmodus aktiv')
@@ -501,11 +925,31 @@ describe('VideoWorkspace', () => {
     fireEvent.keyDown(window, { code: 'KeyZ', key: 'z' })
     expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Zoomsteuerung eingeblendet')
 
+    const viewport = screen.getByTestId('video-zoom-viewport')
+    vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 800, bottom: 450, width: 800, height: 450,
+      toJSON: () => ({})
+    } as DOMRect)
+    act(() => { fireEvent(window, new Event('resize')) })
+
+    fireEvent.keyDown(window, { code: 'BracketRight', key: '+' })
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Zoom vergrößert')
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('1.25×')
+
+    fireEvent.keyDown(window, { code: 'BracketRight', key: '+' })
+    fireEvent.keyDown(window, { code: 'Minus', key: '-' })
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Zoom verkleinert')
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('1.25×')
+
+    fireEvent.keyDown(window, { code: 'Digit0', key: '0' })
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Zoom zurückgesetzt')
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('1.00×')
+
     fireEvent.keyDown(window, { code: 'KeyM', key: 'm' })
     expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Ton ausgeschaltet')
 
     fireEvent.keyDown(window, { code: 'KeyA', key: 'a' })
-    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Anstoß nicht festgelegt')
+    expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Zeitzuordnung nicht festgelegt')
     vi.useRealTimers()
   })
 
@@ -595,9 +1039,11 @@ describe('VideoWorkspace', () => {
     const video = document.querySelector('video')!
     video.currentTime = 15
     act(() => { fireEvent(video, new Event('timeupdate')) })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Nur Segmente abspielen' })) })
     const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
     act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    finishFullscreenSplash()
 
     fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft' })
     expect(screen.getByTestId('fullscreen-keyboard-hud')).toHaveTextContent('Segmentanfang')
@@ -825,8 +1271,8 @@ describe('VideoWorkspace', () => {
 
     expect(screen.getByRole('button', { name: 'Play' })).toHaveAttribute('title', 'Play / Pause (Leertaste)')
     expect(screen.getByRole('button', { name: 'Nur Segmente abspielen' })).toHaveAttribute('title', expect.stringContaining('(N)'))
-    expect(screen.getByRole('button', { name: 'Voriges Segment' })).toHaveAttribute('title', expect.stringContaining('(←)'))
-    expect(screen.getByRole('button', { name: 'Nächstes Segment' })).toHaveAttribute('title', expect.stringContaining('(→)'))
+    expect(screen.getByRole('button', { name: 'Voriges Segment' })).toHaveAttribute('title', 'Zum Segmentanfang; erneut drücken für das vorige Segment')
+    expect(screen.getByRole('button', { name: 'Nächstes Segment' })).toHaveAttribute('title', 'Nächstes Segment')
     expect(screen.getByRole('button', { name: 'Rückwärts' })).toHaveAttribute('title', expect.stringContaining('(Shift+R'))
     expect(screen.getByRole('button', { name: 'Langsamer' })).toHaveAttribute('title', 'Langsamer (<)')
     expect(screen.getByRole('button', { name: 'Schneller' })).toHaveAttribute('title', 'Schneller (>)')
@@ -835,8 +1281,358 @@ describe('VideoWorkspace', () => {
     expect(screen.getByRole('button', { name: 'Springen' })).toHaveAttribute('title', expect.stringContaining('(Enter)'))
 
     fireEvent.click(screen.getByText('Tastenkürzel'))
+    expect(screen.getByText('Ein Bild zurück')).toBeInTheDocument()
+    expect(screen.getByText('Ein Bild vor')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nur Segmente abspielen' }))
+    expect(screen.getByRole('button', { name: 'Voriges Segment' })).toHaveAttribute('title', expect.stringContaining('(←)'))
+    expect(screen.getByRole('button', { name: 'Nächstes Segment' })).toHaveAttribute('title', expect.stringContaining('(→)'))
     expect(screen.getByText('Segmentanfang; zweimal: voriges Segment')).toBeInTheDocument()
+    expect(screen.getByText('Nächstes Segment', { selector: 'span' })).toBeInTheDocument()
     expect(screen.getByText('Nur Segmente abspielen ein-/ausschalten')).toBeInTheDocument()
     expect(screen.getByText('Screenshot speichern')).toBeInTheDocument()
+  })
+
+  it('shows only manually selected perspective videos and synchronizes them by match time', () => {
+    localStorage.removeItem('kaderblick-perspectives-visible')
+    localStorage.removeItem('kaderblick-perspective-paths')
+    const mainVideo = {
+      ...selectedVideo,
+      matchGroupId: 'Spiel 1',
+      durationSeconds: 105 * 60,
+      matchTimeRanges: [
+        { id: 'first', videoStartSeconds: 2 * 60, videoEndSeconds: 47 * 60, matchStartSeconds: 0, matchEndSeconds: 45 * 60 },
+        { id: 'second', videoStartSeconds: 58 * 60, videoEndSeconds: 103 * 60, matchStartSeconds: 45 * 60, matchEndSeconds: 90 * 60 }
+      ]
+    }
+    const rightCamera = {
+      ...selectedVideo,
+      path: '/tmp/camera-right.mp4', fileName: 'camera-right.mp4', fileUrl: 'file:///tmp/camera-right.mp4',
+      matchGroupId: 'Spiel 1', durationSeconds: 105 * 60,
+      matchTimeRanges: [
+        { id: 'first', videoStartSeconds: 60, videoEndSeconds: 46 * 60, matchStartSeconds: 0, matchEndSeconds: 45 * 60 },
+        { id: 'second', videoStartSeconds: 57 * 60, videoEndSeconds: 102 * 60, matchStartSeconds: 45 * 60, matchEndSeconds: 90 * 60 }
+      ]
+    }
+    const phoneClip = {
+      ...selectedVideo,
+      path: '/tmp/phone.mp4', fileName: 'phone.mp4', fileUrl: 'file:///tmp/phone.mp4',
+      matchGroupId: 'Spiel 1', durationSeconds: 180,
+      matchTimeRanges: [{ id: 'clip', videoStartSeconds: 10, videoEndSeconds: 130, matchStartSeconds: 63 * 60, matchEndSeconds: 65 * 60 }]
+    }
+    const unconfiguredCamera = {
+      ...selectedVideo,
+      path: '/tmp/unconfigured.mp4', fileName: 'unconfigured.mp4', fileUrl: 'file:///tmp/unconfigured.mp4',
+      matchGroupId: 'Spiel 1', durationSeconds: 105 * 60
+    }
+    const onMatchVideoSeek = vi.fn()
+
+    render(
+      <VideoWorkspace
+        selectedVideo={mainVideo}
+        matchVideos={[mainVideo, rightCamera, phoneClip, unconfiguredCamera]}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onMatchVideoSeek={onMatchVideoSeek}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const mainElement = document.querySelector('video')!
+    Object.defineProperty(mainElement, 'duration', { configurable: true, value: 105 * 60 })
+    mainElement.currentTime = 32 * 60
+    fireEvent.loadedMetadata(mainElement)
+    fireEvent.timeUpdate(mainElement)
+
+    const perspectiveButton = screen.getByRole('button', { name: 'Perspektiven' })
+    expect(perspectiveButton.tagName).toBe('BUTTON')
+    expect(perspectiveButton).toHaveAttribute('type', 'button')
+    expect(perspectiveButton).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(perspectiveButton)
+    expect(perspectiveButton).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Zusatzperspektiven anzeigen' }))
+    expect(perspectiveButton).toHaveClass('button--active')
+    expect(screen.queryByLabelText('Zusatzperspektive camera-right.mp4')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Zusatzperspektive phone.mp4')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'camera-right.mp4' }))
+    const preview = screen.getByLabelText('Zusatzperspektive camera-right.mp4') as HTMLVideoElement
+    fireEvent.loadedMetadata(preview)
+    expect(preview.src).toBe(rightCamera.fileUrl)
+    expect(preview.currentTime).toBe(31 * 60)
+    expect(screen.queryByLabelText('Zusatzperspektive phone.mp4')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'phone.mp4' }))
+    expect(screen.queryByTestId('perspective-preview-/tmp/phone.mp4')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'unconfigured.mp4' }))
+    expect(screen.queryByTestId('perspective-preview-/tmp/unconfigured.mp4')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'camera-right.mp4 als Hauptansicht öffnen' }))
+    expect(onMatchVideoSeek).toHaveBeenCalledWith(rightCamera, 31 * 60)
+
+    localStorage.removeItem('kaderblick-perspectives-visible')
+    localStorage.removeItem('kaderblick-perspective-paths')
+  })
+
+  it('shows synchronized perspectives before kickoff when the target recordings already contain footage', () => {
+    const leftCamera = {
+      ...selectedVideo,
+      path: '/tmp/left.mp4', fileName: 'left.mp4', fileUrl: 'file:///tmp/left.mp4',
+      matchGroupId: 'Spiel 1', durationSeconds: 110 * 60,
+      matchTimeRanges: [{ id: 'first', videoStartSeconds: 30 * 60, videoEndSeconds: 75 * 60, matchStartSeconds: 0, matchEndSeconds: 45 * 60 }]
+    }
+    const rightCamera = {
+      ...selectedVideo,
+      path: '/tmp/right.mp4', fileName: 'right.mp4', fileUrl: 'file:///tmp/right.mp4',
+      matchGroupId: 'Spiel 1', durationSeconds: 110 * 60,
+      matchTimeRanges: [{ id: 'first', videoStartSeconds: 29 * 60, videoEndSeconds: 74 * 60, matchStartSeconds: 0, matchEndSeconds: 45 * 60 }]
+    }
+    const camcorder = {
+      ...selectedVideo,
+      path: '/tmp/camcorder.mp4', fileName: 'camcorder.mp4', fileUrl: 'file:///tmp/camcorder.mp4',
+      matchGroupId: 'Spiel 1', durationSeconds: 50 * 60,
+      matchTimeRanges: [{ id: 'first', videoStartSeconds: 3 * 60, videoEndSeconds: 48 * 60, matchStartSeconds: 0, matchEndSeconds: 45 * 60 }]
+    }
+    const videos = [leftCamera, rightCamera, camcorder]
+    localStorage.setItem('kaderblick-perspectives-visible', 'true')
+    localStorage.setItem('kaderblick-perspective-paths', JSON.stringify(videos.map((video) => video.path)))
+
+    try {
+      const { rerender } = render(
+        <VideoWorkspace
+          selectedVideo={leftCamera}
+          matchVideos={videos}
+          segments={[]}
+          filterSettings={defaultFilterSettings}
+          filterOverlayVisible={false}
+          repeatSingleSegment={false}
+          onRepeatSingleSegmentChange={() => undefined}
+          onToggleFilterOverlay={() => undefined}
+        >
+          <div />
+        </VideoWorkspace>
+      )
+
+      let mainElement = document.querySelector('video')!
+      mainElement.currentTime = 5 * 60
+      fireEvent.timeUpdate(mainElement)
+
+      const rightPreview = screen.getByLabelText('Zusatzperspektive right.mp4') as HTMLVideoElement
+      fireEvent.loadedMetadata(rightPreview)
+      expect(rightPreview.currentTime).toBe(4 * 60)
+      expect(screen.queryByLabelText('Zusatzperspektive camcorder.mp4')).not.toBeInTheDocument()
+
+      rerender(
+        <VideoWorkspace
+          selectedVideo={camcorder}
+          matchVideos={videos}
+          segments={[]}
+          filterSettings={defaultFilterSettings}
+          filterOverlayVisible={false}
+          repeatSingleSegment={false}
+          onRepeatSingleSegmentChange={() => undefined}
+          onToggleFilterOverlay={() => undefined}
+        >
+          <div />
+        </VideoWorkspace>
+      )
+
+      mainElement = document.querySelector('video')!
+      mainElement.currentTime = 2 * 60
+      fireEvent.timeUpdate(mainElement)
+      expect(screen.getByLabelText('Zusatzperspektive left.mp4')).toBeInTheDocument()
+      expect(screen.getByLabelText('Zusatzperspektive right.mp4')).toBeInTheDocument()
+    } finally {
+      localStorage.removeItem('kaderblick-perspectives-visible')
+      localStorage.removeItem('kaderblick-perspective-paths')
+    }
+  })
+
+  it('moves available perspectives away from opened fullscreen flyouts', () => {
+    localStorage.removeItem('kaderblick-perspectives-visible')
+    localStorage.removeItem('kaderblick-perspective-paths')
+    const mainVideo = {
+      ...selectedVideo,
+      matchGroupId: 'Spiel 1', durationSeconds: 50 * 60,
+      matchTimeRanges: [{ id: 'main', videoStartSeconds: 0, videoEndSeconds: 45 * 60, matchStartSeconds: 0, matchEndSeconds: 45 * 60 }]
+    }
+    const otherVideo = {
+      ...selectedVideo,
+      path: '/tmp/other.mp4', fileName: 'other.mp4', fileUrl: 'file:///tmp/other.mp4',
+      matchGroupId: 'Spiel 1', durationSeconds: 50 * 60,
+      matchTimeRanges: [{ id: 'other', videoStartSeconds: 0, videoEndSeconds: 45 * 60, matchStartSeconds: 0, matchEndSeconds: 45 * 60 }]
+    }
+    render(
+      <VideoWorkspace
+        selectedVideo={mainVideo}
+        matchVideos={[mainVideo, otherVideo]}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const mainElement = document.querySelector('video')!
+    mainElement.currentTime = 10 * 60
+    fireEvent.timeUpdate(mainElement)
+    fireEvent.click(screen.getByText('Perspektiven'))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Zusatzperspektiven anzeigen' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'other.mp4' }))
+
+    const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
+    act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    finishFullscreenSplash()
+
+    const stack = screen.getByLabelText('Aktuell verfügbare Zusatzperspektiven')
+    expect(stack).toHaveClass('perspective-preview-stack--right', 'perspective-preview-stack--top')
+
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Werkzeuge einblenden' }))
+    expect(stack).toHaveClass('perspective-preview-stack--left', 'perspective-preview-stack--top')
+
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Info einblenden' }))
+    expect(stack).toHaveClass('perspective-preview-stack--right', 'perspective-preview-stack--bottom')
+
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Wiedergabe und Timeline einblenden' }))
+    expect(stack).toHaveClass('perspective-preview-stack--right', 'perspective-preview-stack--top')
+
+    localStorage.removeItem('kaderblick-perspectives-visible')
+    localStorage.removeItem('kaderblick-perspective-paths')
+  })
+
+  it('does not restart a playing perspective on every main-video time update', () => {
+    localStorage.removeItem('kaderblick-perspectives-visible')
+    localStorage.removeItem('kaderblick-perspective-paths')
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue()
+    const mainVideo = {
+      ...selectedVideo,
+      matchGroupId: 'Spiel 1', durationSeconds: 50 * 60,
+      matchTimeRanges: [{ id: 'main', videoStartSeconds: 0, videoEndSeconds: 45 * 60, matchStartSeconds: 0, matchEndSeconds: 45 * 60 }]
+    }
+    const otherVideo = {
+      ...selectedVideo,
+      path: '/tmp/stable.mp4', fileName: 'stable.mp4', fileUrl: 'file:///tmp/stable.mp4',
+      matchGroupId: 'Spiel 1', durationSeconds: 50 * 60,
+      matchTimeRanges: [{ id: 'other', videoStartSeconds: 0, videoEndSeconds: 45 * 60, matchStartSeconds: 0, matchEndSeconds: 45 * 60 }]
+    }
+    render(
+      <VideoWorkspace
+        selectedVideo={mainVideo}
+        matchVideos={[mainVideo, otherVideo]}
+        segments={[]}
+        filterSettings={defaultFilterSettings}
+        filterOverlayVisible={false}
+        repeatSingleSegment={false}
+        onRepeatSingleSegmentChange={() => undefined}
+        onToggleFilterOverlay={() => undefined}
+      >
+        <div />
+      </VideoWorkspace>
+    )
+
+    const mainElement = document.querySelector('video')!
+    mainElement.currentTime = 10 * 60
+    fireEvent.timeUpdate(mainElement)
+    fireEvent.play(mainElement)
+    fireEvent.click(screen.getByText('Perspektiven'))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Zusatzperspektiven anzeigen' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'stable.mp4' }))
+    const playCallsAfterMount = playSpy.mock.calls.length
+    const previewElement = screen.getByLabelText('Zusatzperspektive stable.mp4') as HTMLVideoElement
+    Object.defineProperty(previewElement, 'readyState', { configurable: true, value: HTMLMediaElement.HAVE_CURRENT_DATA })
+    const initialPreviewSource = previewElement.src
+
+    for (let step = 1; step <= 6; step += 1) {
+      mainElement.currentTime = 10 * 60 + step * 0.25
+      fireEvent.timeUpdate(mainElement)
+    }
+
+    expect(playSpy).toHaveBeenCalledTimes(playCallsAfterMount)
+    expect(previewElement.src).toBe(initialPreviewSource)
+
+    mainElement.currentTime = 11 * 60
+    fireEvent.timeUpdate(mainElement)
+    expect(previewElement.src).toBe(initialPreviewSource)
+    expect(previewElement.currentTime).toBe(11 * 60)
+    playSpy.mockRestore()
+    localStorage.removeItem('kaderblick-perspectives-visible')
+    localStorage.removeItem('kaderblick-perspective-paths')
+  })
+
+  it('reduces only a perspective that repeatedly drops video frames', () => {
+    vi.useFakeTimers()
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue()
+    localStorage.removeItem('kaderblick-perspectives-visible')
+    localStorage.removeItem('kaderblick-perspective-paths')
+    const mainVideo = {
+      ...selectedVideo,
+      matchGroupId: 'Spiel 1', durationSeconds: 50 * 60,
+      matchTimeRanges: [{ id: 'main', videoStartSeconds: 0, videoEndSeconds: 45 * 60, matchStartSeconds: 0, matchEndSeconds: 45 * 60 }]
+    }
+    const choppyVideo = {
+      ...selectedVideo,
+      path: '/tmp/choppy.mp4', fileName: 'choppy.mp4', fileUrl: 'file:///tmp/choppy.mp4',
+      matchGroupId: 'Spiel 1', durationSeconds: 50 * 60,
+      matchTimeRanges: [{ id: 'other', videoStartSeconds: 0, videoEndSeconds: 45 * 60, matchStartSeconds: 0, matchEndSeconds: 45 * 60 }]
+    }
+
+    try {
+      render(
+        <VideoWorkspace
+          selectedVideo={mainVideo}
+          matchVideos={[mainVideo, choppyVideo]}
+          segments={[]}
+          filterSettings={defaultFilterSettings}
+          filterOverlayVisible={false}
+          repeatSingleSegment={false}
+          onRepeatSingleSegmentChange={() => undefined}
+          onToggleFilterOverlay={() => undefined}
+        >
+          <div />
+        </VideoWorkspace>
+      )
+
+      const mainElement = document.querySelector('video')!
+      mainElement.currentTime = 10 * 60
+      fireEvent.timeUpdate(mainElement)
+      fireEvent.play(mainElement)
+      fireEvent.click(screen.getByText('Perspektiven'))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Zusatzperspektiven anzeigen' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'choppy.mp4' }))
+
+      const preview = screen.getByLabelText('Zusatzperspektive choppy.mp4') as HTMLVideoElement
+      const qualitySamples = [
+        { totalVideoFrames: 0, droppedVideoFrames: 0 },
+        { totalVideoFrames: 30, droppedVideoFrames: 5 },
+        { totalVideoFrames: 60, droppedVideoFrames: 10 }
+      ]
+      Object.defineProperty(preview, 'getVideoPlaybackQuality', {
+        configurable: true,
+        value: vi.fn(() => qualitySamples.shift() ?? { totalVideoFrames: 60, droppedVideoFrames: 10 })
+      })
+
+      expect(preview.src).toBe(choppyVideo.fileUrl)
+      act(() => { vi.advanceTimersByTime(6000) })
+
+      expect(new URL(preview.src).searchParams.get('preview')).toBe('1')
+      expect(new URL(preview.src).searchParams.get('t')).toBe(String(10 * 60))
+      expect(screen.getByText('Optimierte Vorschau')).toBeInTheDocument()
+    } finally {
+      playSpy.mockRestore()
+      vi.useRealTimers()
+      localStorage.removeItem('kaderblick-perspectives-visible')
+      localStorage.removeItem('kaderblick-perspective-paths')
+    }
   })
 })

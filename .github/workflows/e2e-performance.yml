@@ -1,0 +1,43 @@
+name: Electron 4K Langzeittest
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * 1'
+
+jobs:
+  four_k_perspectives:
+    name: Drei reale 4K-Streams
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v7
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Virtuelle Anzeige installieren
+        run: sudo apt-get update && sudo apt-get install --yes xvfb
+
+      - name: 4K-Langzeittest ausführen
+        run: xvfb-run --auto-servernum npm run test:e2e:performance
+
+      - name: Messdaten und Fehlerartefakte sichern
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: electron-4k-performance-${{ github.run_id }}
+          path: |
+            test-results/e2e
+            test-results/performance
+            playwright-report
+          if-no-files-found: ignore
+          retention-days: 30

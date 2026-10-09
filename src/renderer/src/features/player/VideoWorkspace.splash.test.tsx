@@ -80,6 +80,60 @@ describe('VideoWorkspace – Splash Screen', () => {
 
     const splash = document.querySelector('.video-splash')!
     expect(splash).not.toHaveClass('video-splash--hidden')
+    expect(screen.queryByTestId('fullscreen-flyout-shell')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Aktuell verfügbare Zusatzperspektiven')).not.toBeInTheDocument()
+  })
+
+  it('shows no fullscreen controls, dialogs, or active perspectives before playback starts', () => {
+    const mainVideo = {
+      ...directVideo,
+      matchGroupId: 'Spiel 1',
+      durationSeconds: 2700,
+      matchTimeRanges: [{ id: 'main', videoStartSeconds: 0, videoEndSeconds: 2700, matchStartSeconds: 0, matchEndSeconds: 2700 }]
+    }
+    const perspectiveVideo = {
+      ...directVideo,
+      path: '/tmp/perspective.mp4',
+      fileName: 'perspective.mp4',
+      fileUrl: 'file:///tmp/perspective.mp4',
+      matchGroupId: 'Spiel 1',
+      durationSeconds: 2700,
+      matchTimeRanges: [{ id: 'perspective', videoStartSeconds: 0, videoEndSeconds: 2700, matchStartSeconds: 0, matchEndSeconds: 2700 }]
+    }
+    localStorage.setItem('kaderblick-perspectives-visible', 'true')
+    localStorage.setItem('kaderblick-perspective-paths', JSON.stringify([perspectiveVideo.path]))
+
+    try {
+      render(
+        <VideoWorkspace
+          {...baseProps}
+          selectedVideo={mainVideo}
+          matchVideos={[mainVideo, perspectiveVideo]}
+          overlayDialogs={<div data-testid="workspace-overlay">Dialog</div>}
+        >
+          <div />
+        </VideoWorkspace>
+      )
+
+      const video = document.querySelector('video')!
+      video.currentTime = 30
+      fireEvent.timeUpdate(video)
+      expect(screen.getByLabelText('Aktuell verfügbare Zusatzperspektiven')).toBeInTheDocument()
+
+      enterFullscreen()
+
+      expect(screen.queryByTestId('fullscreen-flyout-shell')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Aktuell verfügbare Zusatzperspektiven')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('workspace-overlay')).not.toBeInTheDocument()
+
+      act(() => { fireEvent.play(video) })
+      expect(screen.getByTestId('fullscreen-flyout-shell')).toBeInTheDocument()
+      expect(screen.getByLabelText('Aktuell verfügbare Zusatzperspektiven')).toBeInTheDocument()
+      expect(screen.getByTestId('workspace-overlay')).toBeInTheDocument()
+    } finally {
+      localStorage.removeItem('kaderblick-perspectives-visible')
+      localStorage.removeItem('kaderblick-perspective-paths')
+    }
   })
 
   it('hides when playback starts while in fullscreen', async () => {
@@ -94,12 +148,14 @@ describe('VideoWorkspace – Splash Screen', () => {
     const videoEl = document.querySelector('video')!
     videoEl.play = vi.fn().mockResolvedValue(undefined)
 
-    // Click Play → playPlayback() is called → isPlaying becomes true
-    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Wiedergabe und Timeline einblenden' }))
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Play' })) })
+    await act(async () => {
+      fireEvent.keyDown(window, { code: 'Space', key: ' ' })
+      await Promise.resolve()
+    })
 
     const splash = document.querySelector('.video-splash')!
     expect(splash).toHaveClass('video-splash--hidden')
+    expect(screen.getByTestId('fullscreen-flyout-shell')).toBeInTheDocument()
   })
 
   it('shows the splash again when fullscreen is exited and re-entered', () => {

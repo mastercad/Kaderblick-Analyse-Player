@@ -64,32 +64,37 @@ describe('VideoWorkspace – interstitial on segment navigation', () => {
   })
 
   it('shows interstitial when clicking "Voriges Segment" and interstitialDuration > 0', () => {
-    render(
-      <VideoWorkspace {...baseProps} interstitialDuration={3}>
-        <div />
-      </VideoWorkspace>
-    )
+    vi.useFakeTimers()
+    try {
+      render(
+        <VideoWorkspace {...baseProps} interstitialDuration={3}>
+          <div />
+        </VideoWorkspace>
+      )
 
-    // Move currentTime into the second segment. The first click restarts it;
-    // the second click selects the preceding segment and shows the interstitial.
-    // writable: true is required so that seekTo() inside jumpToSegment can re-assign currentTime
-    const videoEl = document.querySelector('video')!
-    Object.defineProperty(videoEl, 'currentTime', { value: 95, configurable: true, writable: true })
-    act(() => {
-      fireEvent(videoEl, new Event('timeupdate'))
-    })
+      // Move currentTime into the second segment. The first click restarts it;
+      // the second click within the repeat window selects the preceding segment.
+      // A mocked clock makes that timing contract deterministic under full-suite load.
+      const videoEl = document.querySelector('video')!
+      Object.defineProperty(videoEl, 'currentTime', { value: 95, configurable: true, writable: true })
+      act(() => {
+        fireEvent(videoEl, new Event('timeupdate'))
+      })
 
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: 'Voriges Segment' }))
-    })
+      act(() => {
+        fireEvent.click(screen.getByRole('button', { name: 'Voriges Segment' }))
+      })
 
-    expect(screen.queryByText('Nächste Szene')).not.toBeInTheDocument()
+      expect(screen.queryByText('Nächste Szene')).not.toBeInTheDocument()
 
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: 'Voriges Segment' }))
-    })
+      act(() => {
+        fireEvent.click(screen.getByRole('button', { name: 'Voriges Segment' }))
+      })
 
-    expect(screen.getByText('Nächste Szene')).toBeInTheDocument()
+      expect(screen.getByText('Nächste Szene')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shows interstitial when clicking a segment card in the list and interstitialDuration > 0', () => {
@@ -1468,7 +1473,7 @@ describe('VideoWorkspace – Bug 1: onAllSegmentsDone wird gerufen wenn kein nä
 })
 
 describe('VideoWorkspace – zweistufige Rückwärtsnavigation', () => {
-  it('nutzt Segmente außerhalb des Segmentmodus als Sprungmarken und geht beim zweiten schnellen Druck genau eins weiter zurück', () => {
+  it('navigiert außerhalb des Segmentmodus mit den Pfeiltasten bildweise statt zwischen Segmenten', () => {
     const spacedSegments = [
       makeSegment('s1', 10, 20, 'Erstes'),
       makeSegment('s2', 40, 50, 'Zweites'),
@@ -1481,15 +1486,17 @@ describe('VideoWorkspace – zweistufige Rückwärtsnavigation', () => {
     )
 
     const videoEl = document.querySelector('video')!
+    Object.defineProperty(videoEl, 'duration', { value: 100, configurable: true })
     Object.defineProperty(videoEl, 'currentTime', { value: 60, configurable: true, writable: true })
+    act(() => { fireEvent.loadedMetadata(videoEl) })
     act(() => { fireEvent(videoEl, new Event('timeupdate')) })
     expect(screen.getByRole('button', { name: 'Nur Segmente abspielen' })).toHaveAttribute('aria-pressed', 'false')
 
     act(() => { fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft', repeat: false }) })
-    expect(document.querySelector('.time-row__current')?.textContent).toBe('00:40')
+    expect(videoEl.currentTime).toBeCloseTo(60 - (1 / 25), 5)
 
-    act(() => { fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft', repeat: false }) })
-    expect(document.querySelector('.time-row__current')?.textContent).toBe('00:10')
+    act(() => { fireEvent.keyDown(window, { code: 'ArrowRight', key: 'ArrowRight', repeat: false }) })
+    expect(videoEl.currentTime).toBeCloseTo(60, 5)
     expect(screen.getByRole('button', { name: 'Nur Segmente abspielen' })).toHaveAttribute('aria-pressed', 'false')
   })
 
@@ -1577,6 +1584,7 @@ describe('VideoWorkspace – zweistufige Rückwärtsnavigation', () => {
     const videoEl = document.querySelector('video')!
     Object.defineProperty(videoEl, 'currentTime', { value: 90, configurable: true, writable: true })
     act(() => { fireEvent(videoEl, new Event('timeupdate')) })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Nur Segmente abspielen' })) })
 
     act(() => { fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft', repeat: false }) })
     expect(document.querySelector('.time-row__current')?.textContent).toBe('01:30')
@@ -1600,6 +1608,7 @@ describe('VideoWorkspace – zweistufige Rückwärtsnavigation', () => {
     const videoEl = document.querySelector('video')!
     Object.defineProperty(videoEl, 'currentTime', { value: 90, configurable: true, writable: true })
     act(() => { fireEvent(videoEl, new Event('timeupdate')) })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Nur Segmente abspielen' })) })
 
     act(() => { fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft', repeat: false }) })
     act(() => { vi.advanceTimersByTime(1000) })

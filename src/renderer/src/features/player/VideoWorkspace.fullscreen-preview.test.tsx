@@ -49,6 +49,7 @@ describe('VideoWorkspace – timeline preview in fullscreen', () => {
     const playerPanel = screen.getByTestId('video-zoom-viewport').closest('section') as HTMLElement
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
     act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
+    act(() => { fireEvent.play(video) })
 
     fireEvent.click(screen.getByRole('button', { name: 'Wiedergabe und Timeline einblenden' }))
     const timeline = screen.getByRole('button', { name: 'Zeitleiste' })

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { formatClockTime } from '../../../../common/timeUtils'
 import type { CsvFileDescriptor, VideoFileDescriptor } from '../../../../common/types'
 
 interface LibraryToolbarProps {
@@ -12,6 +13,7 @@ interface LibraryToolbarProps {
   onAddVideos: () => Promise<void>
   onAddOnlineVideo: () => void
   onSelectVideo: (index: number) => void
+  onRemoveVideo: (index: number) => void
   onReorderVideos?: (reordered: VideoFileDescriptor[]) => void
   onLoadCsv: () => Promise<void>
 }
@@ -27,6 +29,7 @@ export function LibraryToolbar({
   onAddVideos,
   onAddOnlineVideo,
   onSelectVideo,
+  onRemoveVideo,
   onReorderVideos,
   onLoadCsv
 }: LibraryToolbarProps) {
@@ -87,6 +90,19 @@ export function LibraryToolbar({
             CSV laden
           </button>
         </div>
+
+        {compact ? (
+          <div className="toolbar__status" aria-label="Bibliotheksstatus">
+            <div className="toolbar-status" title={selectedCsv?.path}>
+              <span>CSV</span>
+              <strong>{selectedCsv?.fileName ?? 'Keine geladen'}</strong>
+            </div>
+            <div className="toolbar-status">
+              <span>Segmente</span>
+              <strong>{matchedSegmentCount} / {totalSegmentCount}</strong>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="toolbar__meta">
@@ -124,6 +140,10 @@ export function LibraryToolbar({
                     title={video.path}
                   >
                     <span className="video-library-item__name">{video.fileName}</span>
+                    <span className="video-library-item__details">
+                      {index === activeVideoIndex ? <span className="video-library-item__active-label">Aktiv</span> : null}
+                      {video.durationSeconds && video.durationSeconds > 0 ? <span>{formatClockTime(video.durationSeconds)}</span> : null}
+                    </span>
                     {video.playbackMode === 'proxy' && (
                       <span className="playback-badge" title={video.playbackHint ?? 'Optimierte Wiedergabe'}>
                         <span className="playback-badge__dot" aria-hidden="true" />
@@ -139,6 +159,15 @@ export function LibraryToolbar({
                       </span>
                     )}
                   </button>
+                  <button
+                    type="button"
+                    className="video-library-item__remove"
+                    aria-label={`${video.fileName} aus der Bibliothek entfernen`}
+                    title="Aus der Bibliothek entfernen – die Datei bleibt erhalten"
+                    onClick={() => onRemoveVideo(index)}
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -147,16 +176,20 @@ export function LibraryToolbar({
             <span className="meta-card__hint">{activeVideo.playbackHint}</span>
           ) : null}
         </div>
-        <div className="meta-card">
-          <span className="meta-card__label">Segmentdatei</span>
-          <strong>{selectedCsv?.fileName ?? 'Noch keine CSV geladen'}</strong>
-        </div>
-        <div className="meta-card">
-          <span className="meta-card__label">Passende Segmente</span>
-          <strong>
-            {matchedSegmentCount} / {totalSegmentCount}
-          </strong>
-        </div>
+        {!compact ? (
+          <>
+            <div className="meta-card">
+              <span className="meta-card__label">Segmentdatei</span>
+              <strong>{selectedCsv?.fileName ?? 'Noch keine CSV geladen'}</strong>
+            </div>
+            <div className="meta-card">
+              <span className="meta-card__label">Passende Segmente</span>
+              <strong>
+                {matchedSegmentCount} / {totalSegmentCount}
+              </strong>
+            </div>
+          </>
+        ) : null}
       </div>
     </section>
   )

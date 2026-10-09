@@ -6,6 +6,7 @@ import { areFilterSettingsEqual, mergeCustomPresets, sanitizeFilterSettings } fr
 import { matchSegmentsToLoadedVideo, matchSegmentsToLoadedVideos, parseSegmentsCsv, interpolateSegmentTitles } from '../../../common/segmentUtils'
 import { formatClockTime } from '../../../common/timeUtils'
 import { resolveSegmentForPlayback } from '../../../common/matchTimeUtils'
+import { removeVideoFromLibrary } from '../../../common/videoLibraryUtils'
 import type { AppInfo, AppSettingsExport, CsvFileDescriptor, FilterPreset, FilterSettings, PlayerJumpTimeMode, Segment, SegmentEditorDraft, SessionSnapshot, VideoFileDescriptor, VideoPreparationProgress } from '../../../common/types'
 import { AboutDialog } from '../features/app/AboutDialog'
 import { SessionRestoreDialog } from '../features/app/SessionRestoreDialog'
@@ -356,6 +357,26 @@ export function App() {
     setAutoStartSegmentsOnLoad(isSegmentModeRef.current && hasSegments)
     setAutoStartSegmentsFromEnd(false)
     setActiveVideoIndex(index)
+  }
+
+  const handleRemoveVideo = (index: number): void => {
+    const result = removeVideoFromLibrary(videoLibrary, activeVideoIndex, index)
+    if (!result.removedVideo) return
+
+    const removedActiveVideo = videoLibrary[activeVideoIndex]?.path === result.removedVideo.path
+    setVideoLibrary(result.videos)
+    setActiveVideoIndex(result.activeVideoIndex)
+    if (pendingMatchSeek?.videoPath === result.removedVideo.path) setPendingMatchSeek(null)
+    if (streamingConfirmFor?.video.path === result.removedVideo.path) setStreamingConfirmFor(null)
+    if (removedActiveVideo) {
+      videoCurrentTimeRef.current = 0
+      isRecoveringPlaybackRef.current = false
+      setIsRecoveringPlayback(false)
+      setAutoPlayRecoveredVideo(false)
+      setAutoStartSegmentsOnLoad(false)
+      setAutoStartSegmentsFromEnd(false)
+    }
+    setStatusMessage(`${result.removedVideo.fileName} aus der Bibliothek entfernt. Die Datei wurde nicht gelöscht.`)
   }
 
   const handleMatchVideoSeek = (video: VideoFileDescriptor, videoSeconds: number): void => {
@@ -750,6 +771,7 @@ export function App() {
           onAddVideos={handleAddVideos}
           onAddOnlineVideo={() => setAddOnlineVideoDialogOpen(true)}
           onSelectVideo={handleSelectVideo}
+          onRemoveVideo={handleRemoveVideo}
           onReorderVideos={(reordered) => {
             const currentVideo = videoLibrary[activeVideoIndex]
             setVideoLibrary(reordered)
@@ -772,6 +794,7 @@ export function App() {
                 selectedVideo={selectedVideo}
                 matchVideos={videoLibrary}
                 jumpTimeMode={playerJumpTimeMode}
+                onJumpTimeModeChange={handlePlayerJumpTimeModeChange}
                 segments={playbackSegments}
                 segmentDisplayTimes={segmentDisplayTimes}
                 isSegmentEditorOpen={segmentEditorOpen}

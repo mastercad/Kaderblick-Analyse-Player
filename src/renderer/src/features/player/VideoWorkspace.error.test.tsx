@@ -62,7 +62,9 @@ describe('VideoWorkspace – video error handling', () => {
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerPanel })
     act(() => { document.dispatchEvent(new Event('fullscreenchange')) })
 
-    fireVideoError(document.querySelector('video')!, MEDIA_ERR_DECODE)
+    const video = document.querySelector('video')!
+    act(() => { fireEvent.play(video) })
+    fireVideoError(video, MEDIA_ERR_DECODE)
 
     expect(screen.getByTestId('fullscreen-playback-banner')).toHaveTextContent(/konnte nicht decodiert/)
     expect(within(screen.getByTestId('fullscreen-flyout-right-panel')).queryByText(/konnte nicht decodiert/)).not.toBeInTheDocument()

@@ -1,4 +1,4 @@
-import { buildStreamUrl, KVIDEO_SCHEME } from './streaming'
+import { buildPreviewStreamUrl, buildStreamUrl, KVIDEO_SCHEME } from './streaming'
 
 describe('buildStreamUrl', () => {
   it('builds a URL with the kvideo scheme', () => {
@@ -47,5 +47,13 @@ describe('buildStreamUrl', () => {
     const url = new URL(buildStreamUrl('C:\\Videos\\clip.mp4', 10))
     expect(url.searchParams.get('p')).toBe('C:\\Videos\\clip.mp4')
     expect(url.searchParams.get('t')).toBe('10')
+  })
+
+  it('marks reduced preview streams explicitly', () => {
+    const url = new URL(buildPreviewStreamUrl('/tmp/4k-video.mp4', 45.5))
+
+    expect(url.searchParams.get('p')).toBe('/tmp/4k-video.mp4')
+    expect(url.searchParams.get('t')).toBe('45.5')
+    expect(url.searchParams.get('preview')).toBe('1')
   })
 })

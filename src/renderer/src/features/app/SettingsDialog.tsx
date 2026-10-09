@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom'
+import { PLAYER_JUMP_TIME_MODE_OPTIONS } from '../../../../common/playerJumpTimeModes'
 import type { PlayerJumpTimeMode } from '../../../../common/types'
 
 interface SettingsDialogProps {
@@ -7,13 +8,6 @@ interface SettingsDialogProps {
   onJumpTimeModeChange: (mode: PlayerJumpTimeMode) => void
   onClose: () => void
 }
-
-const jumpTimeModes: Array<{ value: PlayerJumpTimeMode; title: string; description: string }> = [
-  { value: 'video-per-file', title: 'Videozeit – je Video', description: 'Die Eingabe ist die direkte Position im aktuell geöffneten Video.' },
-  { value: 'video-cumulative', title: 'Videozeit – fortlaufend', description: 'Die Laufzeiten vorheriger Videos desselben Spiels sind eingerechnet.' },
-  { value: 'match-per-part', title: 'Spielzeit – je Halbzeit/Teil', description: 'Die Zeit beginnt in jeder Halbzeit beziehungsweise jedem Teil wieder bei 00:00.' },
-  { value: 'match-cumulative', title: 'Spielzeit – fortlaufend', description: 'Die Spieluhr läuft über alle Halbzeiten beziehungsweise Teile weiter.' }
-]
 
 export function SettingsDialog({ open, jumpTimeMode, onJumpTimeModeChange, onClose }: SettingsDialogProps) {
   if (!open) return null
@@ -31,7 +25,7 @@ export function SettingsDialog({ open, jumpTimeMode, onJumpTimeModeChange, onClo
         <p className="settings-dialog__intro">Wie sollen Sprungzeiten und die unverändert gespeicherten Segmentzeiten bei der Wiedergabe interpretiert werden?</p>
         <fieldset className="settings-dialog__options">
           <legend>Zeitformat für Sprungziele</legend>
-          {jumpTimeModes.map((mode) => (
+          {PLAYER_JUMP_TIME_MODE_OPTIONS.map((mode) => (
             <label className="settings-dialog__option" key={mode.value}>
               <input type="radio" name="jump-time-mode" value={mode.value} checked={jumpTimeMode === mode.value} onChange={() => onJumpTimeModeChange(mode.value)} />
               <span><strong>{mode.title}</strong><small>{mode.description}</small></span>

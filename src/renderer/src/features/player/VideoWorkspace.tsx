@@ -1,8 +1,10 @@
 import { cloneElement, isValidElement, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react'
 import { buildCssFilter } from '../../../../common/filterUtils'
-import { findActiveSegmentIndex, parseTimeInput } from '../../../../common/segmentUtils'
+import { getPlayerJumpTimeModeOption, PLAYER_JUMP_TIME_MODE_OPTIONS } from '../../../../common/playerJumpTimeModes'
+import { buildPreviewStreamUrl, buildStreamUrl } from '../../../../common/streaming'
+import { findActiveSegmentIndex, parsePlayerJumpTimeInput } from '../../../../common/segmentUtils'
 import { formatClockTime, formatSegmentTime } from '../../../../common/timeUtils'
-import { getHalfStartSeconds, resolvePlayerJumpTarget, videoTimeToPlayerInput } from '../../../../common/matchTimeUtils'
+import { findSynchronizedPerspectiveTime, getMatchVideoTimeRange, resolvePlayerJumpTarget, videoTimeToPlayerInput } from '../../../../common/matchTimeUtils'
 import type { FilterSettings, PlayerJumpTimeMode, Segment, VideoFileDescriptor } from '../../../../common/types'
 import appLogo from '../../../../../assets/kaderblick_analyse_player_appicon.svg'
 import { SegmentList } from './SegmentList'
@@ -20,6 +22,7 @@ interface VideoWorkspaceProps {
   selectedVideo?: VideoFileDescriptor
   matchVideos?: VideoFileDescriptor[]
   jumpTimeMode?: PlayerJumpTimeMode
+  onJumpTimeModeChange?: (mode: PlayerJumpTimeMode) => void
   segments: Segment[]
   segmentDisplayTimes?: Segment[]
   filterSettings: FilterSettings
@@ -68,6 +71,141 @@ interface ScreenshotStatus {
 
 const fullscreenOrientationStorageKey = 'kaderblick-fullscreen-orientation-visible'
 const segmentSidebarCollapsedStorageKey = 'kaderblick-segment-sidebar-collapsed'
+const perspectiveVisibleStorageKey = 'kaderblick-perspectives-visible'
+const perspectivePathsStorageKey = 'kaderblick-perspective-paths'
+
+interface PerspectivePreviewProps {
+  video: VideoFileDescriptor
+  targetSeconds: number
+  isPlaying: boolean
+  playbackRate: number
+  onActivate: () => void
+}
+
+const reducedPerspectivePreviewPaths = new Set<string>()
+
+function PerspectivePreview({ video, targetSeconds, isPlaying, playbackRate, onActivate }: PerspectivePreviewProps) {
+  const previewRef = useRef<HTMLVideoElement | null>(null)
+  const [useReducedStream, setUseReducedStream] = useState(() => (
+    video.playbackMode === 'stream' || reducedPerspectivePreviewPaths.has(video.path)
+  ))
+  const [streamStartSeconds, setStreamStartSeconds] = useState(targetSeconds)
+  const canRenderVideo = video.playbackMode !== 'online'
+  const targetSecondsRef = useRef(targetSeconds)
+  const previousTargetSecondsRef = useRef<number | null>(null)
+  const qualitySampleRef = useRef<{ total: number; dropped: number; badSamples: number } | null>(null)
+
+  targetSecondsRef.current = targetSeconds
+
+  const synchronizePosition = useEffectEvent((force: boolean): void => {
+    const preview = previewRef.current
+    if (!preview || preview.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return
+    const currentTargetSeconds = targetSecondsRef.current
+    const effectiveTime = useReducedStream ? streamStartSeconds + preview.currentTime : preview.currentTime
+    if (force || Math.abs(effectiveTime - currentTargetSeconds) > 1.25) {
+      if (useReducedStream && Math.abs(streamStartSeconds - currentTargetSeconds) > 0.01) {
+        setStreamStartSeconds(currentTargetSeconds)
+      } else if (!useReducedStream) {
+        preview.currentTime = currentTargetSeconds
+      }
+    }
+  })
+
+  const enableReducedStream = useEffectEvent((): void => {
+    if (useReducedStream) return
+    reducedPerspectivePreviewPaths.add(video.path)
+    setStreamStartSeconds(targetSecondsRef.current)
+    setUseReducedStream(true)
+  })
+
+  useEffect(() => {
+    const previousTargetSeconds = previousTargetSecondsRef.current
+    previousTargetSecondsRef.current = targetSeconds
+    if (previousTargetSeconds === null || !isPlaying || Math.abs(targetSeconds - previousTargetSeconds) > 2) {
+      synchronizePosition(true)
+    }
+  }, [targetSeconds, isPlaying])
+
+  useEffect(() => {
+    const preview = previewRef.current
+    if (!preview) return
+    preview.playbackRate = playbackRate
+    if (isPlaying) {
+      if (preview.paused) {
+        const playResult = preview.play()
+        if (playResult) void playResult.catch(() => undefined)
+      }
+    } else {
+      if (!preview.paused) preview.pause()
+    }
+  }, [isPlaying, playbackRate])
+
+  useEffect(() => {
+    if (!isPlaying) return
+    const correctionTimer = window.setInterval(() => synchronizePosition(false), 1500)
+    return () => window.clearInterval(correctionTimer)
+  }, [isPlaying])
+
+  useEffect(() => {
+    if (!isPlaying || useReducedStream) return
+    const qualityTimer = window.setInterval(() => {
+      const preview = previewRef.current
+      if (!preview || typeof preview.getVideoPlaybackQuality !== 'function') return
+      const quality = preview.getVideoPlaybackQuality()
+      const previous = qualitySampleRef.current
+      if (!previous) {
+        qualitySampleRef.current = { total: quality.totalVideoFrames, dropped: quality.droppedVideoFrames, badSamples: 0 }
+        return
+      }
+      const totalDelta = quality.totalVideoFrames - previous.total
+      const droppedDelta = quality.droppedVideoFrames - previous.dropped
+      const droppedRatio = totalDelta > 0 ? droppedDelta / totalDelta : 0
+      const badSamples = totalDelta >= 10 && droppedRatio >= 0.08 ? previous.badSamples + 1 : 0
+      qualitySampleRef.current = { total: quality.totalVideoFrames, dropped: quality.droppedVideoFrames, badSamples }
+      if (badSamples >= 2) enableReducedStream()
+    }, 2000)
+    return () => window.clearInterval(qualityTimer)
+  }, [isPlaying, useReducedStream])
+
+  const previewSource = useReducedStream
+    ? buildPreviewStreamUrl(video.path, streamStartSeconds)
+    : video.playbackMode === 'stream'
+      ? buildStreamUrl(video.path, streamStartSeconds)
+      : video.fileUrl
+
+  const handleLoadedMetadata = (): void => {
+    if (!useReducedStream) synchronizePosition(true)
+  }
+
+  return (
+    <button
+      className="perspective-preview"
+      data-testid={`perspective-preview-${video.path}`}
+      type="button"
+      onClick={onActivate}
+      title={`${video.fileName} als Hauptansicht öffnen`}
+      aria-label={`${video.fileName} als Hauptansicht öffnen`}
+    >
+      <div className="perspective-preview__heading" title={video.path}>
+        <span>{video.fileName}</span>
+        <span>{useReducedStream ? 'Optimierte Vorschau' : 'Ansicht öffnen'}</span>
+      </div>
+      {canRenderVideo ? (
+        <video
+          ref={previewRef}
+          src={previewSource}
+          muted
+          playsInline
+          preload="metadata"
+          onLoadedMetadata={handleLoadedMetadata}
+          aria-label={`Zusatzperspektive ${video.fileName}`}
+        />
+      ) : (
+        <div className="perspective-preview__unavailable">Vorschau für diese Wiedergabeart nicht verfügbar</div>
+      )}
+    </button>
+  )
+}
 
 function FlyoutPinIndicator() {
   return (
@@ -81,6 +219,7 @@ export function VideoWorkspace({
   selectedVideo,
   matchVideos = [],
   jumpTimeMode = 'match-cumulative',
+  onJumpTimeModeChange,
   segments,
   segmentDisplayTimes,
   filterSettings,
@@ -216,8 +355,8 @@ export function VideoWorkspace({
 
   // Splash screen: show whenever fullscreen is entered; hide once playback/interstitial starts.
   const [fullscreenStarted, setFullscreenStarted] = useState(false)
-  const [matchTimeInput, setMatchTimeInput] = useState('')
-  const [matchTimeError, setMatchTimeError] = useState<string | null>(null)
+  const [jumpTimeInput, setJumpTimeInput] = useState('')
+  const [jumpTimeError, setJumpTimeError] = useState<string | null>(null)
   const [reversePlaybackError, setReversePlaybackError] = useState<string | null>(null)
   const [keyboardHud, setKeyboardHud] = useState<KeyboardHudMessage | null>(null)
   const [fullscreenOrientationVisible, setFullscreenOrientationVisible] = useState(() => {
@@ -228,8 +367,24 @@ export function VideoWorkspace({
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(segmentSidebarCollapsedStorageKey) === 'true'
   })
+  const [perspectivesVisible, setPerspectivesVisible] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(perspectiveVisibleStorageKey) === 'true'
+  })
+  const [perspectivePaths, setPerspectivePaths] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(perspectivePathsStorageKey) ?? '[]')
+      return Array.isArray(stored) ? stored.filter((path): path is string => typeof path === 'string') : []
+    } catch {
+      return []
+    }
+  })
+  const [perspectivePickerOpen, setPerspectivePickerOpen] = useState(false)
+  const perspectivePickerRef = useRef<HTMLDivElement | null>(null)
   const keyboardHudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const keyboardHudSequenceRef = useRef(0)
+  const previousZoomLevelRef = useRef(zoom.zoomLevel)
 
   const showKeyboardHud = (icon: string, label: string, value?: string): void => {
     if (!isFullscreen || !selectedVideo) return
@@ -252,12 +407,44 @@ export function VideoWorkspace({
   }, [isFullscreen])
 
   useEffect(() => {
+    const previousZoomLevel = previousZoomLevelRef.current
+    previousZoomLevelRef.current = zoom.zoomLevel
+    if (!fullscreenStarted || previousZoomLevel === zoom.zoomLevel) return
+
+    const wasReset = zoom.zoomLevel === MIN_ZOOM_LEVEL
+    showKeyboardHud(
+      wasReset ? '↺' : zoom.zoomLevel > previousZoomLevel ? '+' : '−',
+      wasReset ? 'Zoom zurückgesetzt' : zoom.zoomLevel > previousZoomLevel ? 'Zoom vergrößert' : 'Zoom verkleinert',
+      `${zoom.zoomLevel.toFixed(2)}×`
+    )
+  }, [fullscreenStarted, zoom.zoomLevel])
+
+  useEffect(() => {
     window.localStorage.setItem(fullscreenOrientationStorageKey, String(fullscreenOrientationVisible))
   }, [fullscreenOrientationVisible])
 
   useEffect(() => {
     window.localStorage.setItem(segmentSidebarCollapsedStorageKey, String(segmentSidebarCollapsed))
   }, [segmentSidebarCollapsed])
+
+  useEffect(() => {
+    window.localStorage.setItem(perspectiveVisibleStorageKey, String(perspectivesVisible))
+  }, [perspectivesVisible])
+
+  useEffect(() => {
+    window.localStorage.setItem(perspectivePathsStorageKey, JSON.stringify(perspectivePaths))
+  }, [perspectivePaths])
+
+  useEffect(() => {
+    if (!perspectivePickerOpen) return
+    const closeOnOutsidePointer = (event: PointerEvent): void => {
+      if (!perspectivePickerRef.current?.contains(event.target as Node)) {
+        setPerspectivePickerOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointer)
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer)
+  }, [perspectivePickerOpen])
 
   useLayoutEffect(() => {
     if (!isFullscreen || !fullscreenBottomFlyoutRef.current) {
@@ -307,13 +494,17 @@ export function VideoWorkspace({
   }, [isFullscreen, playback.isPlaying, playback.isInterstitialCounting])
 
   const jumpToKickoff = (): void => {
-    if (selectedVideo?.kickoffVideoSeconds === undefined || selectedVideo.matchHalf === undefined) {
-      showKeyboardHud('A', 'Anstoß nicht festgelegt')
+    if (!selectedVideo) {
+      showKeyboardHud('A', 'Zeitzuordnung nicht festgelegt')
       return
     }
-    playback.seekTo(selectedVideo.kickoffVideoSeconds)
-    const halfStartSeconds = getHalfStartSeconds(selectedVideo.matchHalf, selectedVideo.matchDurationSeconds)
-    showKeyboardHud('A', 'Anstoß', `Spielzeit ${formatClockTime(halfStartSeconds)}`)
+    const range = getMatchVideoTimeRange(matchVideos, selectedVideo)
+    if (!range) {
+      showKeyboardHud('A', 'Zeitzuordnung nicht festgelegt')
+      return
+    }
+    playback.seekTo(range.videoStartSeconds)
+    showKeyboardHud('A', 'Beginn der Zeitzuordnung', `Spielzeit ${formatClockTime(range.matchStartSeconds)}`)
   }
 
   const showScreenshotStatus = (status: ScreenshotStatus, duration = 3000): void => {
@@ -431,18 +622,50 @@ export function VideoWorkspace({
     }
 
     // Arrow keys on range inputs control the slider — don't intercept them
-    if (isRangeInput && (event.code === 'ArrowLeft' || event.code === 'ArrowRight')) return
+    if (isRangeInput && !event.ctrlKey && (event.code === 'ArrowLeft' || event.code === 'ArrowRight')) return
+
+    if (event.ctrlKey && (event.code === 'ArrowLeft' || event.code === 'ArrowRight')) {
+      event.preventDefault()
+      if (event.repeat) return
+
+      const currentIndex = selectedVideo
+        ? matchVideos.findIndex((video) => video.path === selectedVideo.path)
+        : -1
+      const direction = event.code === 'ArrowLeft' ? -1 : 1
+      const targetVideo = currentIndex >= 0 ? matchVideos[currentIndex + direction] : undefined
+
+      if (!targetVideo || !onMatchVideoSeek) {
+        showKeyboardHud(direction < 0 ? '│‹' : '›│', direction < 0 ? 'Kein vorheriges Video' : 'Kein nächstes Video')
+        return
+      }
+
+      onMatchVideoSeek(targetVideo, 0)
+      showKeyboardHud(direction < 0 ? '◀' : '▶', 'Video gewechselt', targetVideo.fileName)
+      return
+    }
 
     if (event.code === 'ArrowLeft' && !event.shiftKey) {
       event.preventDefault()
-      if (!event.repeat) {
+      if (!playback.isSegmentMode) {
+        showKeyboardHud('‹', 'Ein Bild zurück', '1 Frame')
+        playback.stepFrame('backward')
+      } else if (!event.repeat) {
         const result = playback.jumpToPreviousSegment()
         if (result === 'segment-start') showKeyboardHud('↤', 'Segmentanfang')
         else if (result === 'previous-segment') showKeyboardHud('‹', 'Voriges Segment')
         else showKeyboardHud('│‹', 'Erstes Segment erreicht')
       }
     }
-    if (event.code === 'ArrowRight' && !event.shiftKey) { event.preventDefault(); if (!event.repeat) { showKeyboardHud('›', 'Nächstes Segment'); playback.jumpToNextSegment() } }
+    if (event.code === 'ArrowRight' && !event.shiftKey) {
+      event.preventDefault()
+      if (!playback.isSegmentMode) {
+        showKeyboardHud('›', 'Ein Bild vor', '1 Frame')
+        playback.stepFrame('forward')
+      } else if (!event.repeat) {
+        showKeyboardHud('›', 'Nächstes Segment')
+        playback.jumpToNextSegment()
+      }
+    }
     if (event.code === 'ArrowLeft' && event.shiftKey) { event.preventDefault(); showKeyboardHud('↶', 'Zurückgesprungen', `${SEEK_STEP_SECONDS} s`); playback.jumpBySeconds(-SEEK_STEP_SECONDS) }
     if (event.code === 'ArrowRight' && event.shiftKey) { event.preventDefault(); showKeyboardHud('↷', 'Vorgesprungen', `${SEEK_STEP_SECONDS} s`); playback.jumpBySeconds(SEEK_STEP_SECONDS) }
     if (event.key === ',') { event.preventDefault(); showKeyboardHud('‹', 'Ein Bild zurück', '1 Frame'); playback.stepFrame('backward') }
@@ -499,9 +722,9 @@ export function VideoWorkspace({
       else showKeyboardHud('!', 'Rückwärts nicht verfügbar')
     }
     if (event.code === 'F11') { event.preventDefault(); void toggleFullscreen() }
-    if (event.code === 'Equal' || event.code === 'NumpadAdd') { event.preventDefault(); if (!playback.interstitialSegment) { const next = Math.min(MAX_ZOOM_LEVEL, zoom.zoomLevel + ZOOM_STEP); showKeyboardHud('+', 'Vergrößert', formatRate(next)); zoom.zoomToViewportPoint(next) } }
-    if (event.code === 'Minus' || event.code === 'NumpadSubtract') { event.preventDefault(); if (!playback.interstitialSegment) { const next = Math.max(MIN_ZOOM_LEVEL, zoom.zoomLevel - ZOOM_STEP); showKeyboardHud('−', 'Verkleinert', formatRate(next)); zoom.zoomToViewportPoint(next) } }
-    if (event.code === 'Digit0' || event.code === 'Numpad0') { event.preventDefault(); if (!playback.interstitialSegment) { showKeyboardHud('↺', 'Zoom zurückgesetzt', formatRate(MIN_ZOOM_LEVEL)); zoom.resetZoom() } }
+    if (event.key === '+' || event.code === 'Equal' || event.code === 'NumpadAdd') { event.preventDefault(); if (!playback.interstitialSegment) zoom.zoomToViewportPoint(Math.min(MAX_ZOOM_LEVEL, zoom.zoomLevel + ZOOM_STEP)) }
+    if (event.key === '-' || event.code === 'Minus' || event.code === 'NumpadSubtract') { event.preventDefault(); if (!playback.interstitialSegment) zoom.zoomToViewportPoint(Math.max(MIN_ZOOM_LEVEL, zoom.zoomLevel - ZOOM_STEP)) }
+    if (event.code === 'Digit0' || event.code === 'Numpad0') { event.preventDefault(); if (!playback.interstitialSegment) zoom.resetZoom() }
     if (event.code === 'KeyZ') {
       event.preventDefault()
       if (event.repeat) return
@@ -571,18 +794,48 @@ export function VideoWorkspace({
     if (wasScrubbing && continuePlaying) void playback.togglePlayPause()
   }
 
-  const hasMatchClock = selectedVideo?.matchHalf !== undefined && selectedVideo.kickoffVideoSeconds !== undefined
+  const selectedMatchRange = selectedVideo ? getMatchVideoTimeRange(matchVideos, selectedVideo) : null
+  const hasMatchClock = selectedMatchRange !== null
   const currentMatchTime = hasMatchClock
     ? videoTimeToPlayerInput('match-cumulative', matchVideos, selectedVideo, playback.currentTime)
     : null
+  const selectedMatchGroup = selectedVideo?.matchGroupId?.trim().toLocaleLowerCase() ?? ''
+  const perspectiveOptions = matchVideos.filter((video) => (
+    video.path !== selectedVideo?.path &&
+    (video.matchGroupId?.trim().toLocaleLowerCase() ?? '') === selectedMatchGroup
+  ))
+  const selectedPerspectiveVideos = perspectivePaths.flatMap((path) => {
+    const video = perspectiveOptions.find((candidate) => candidate.path === path)
+    return video ? [video] : []
+  })
+  const getPerspectiveTarget = (video: VideoFileDescriptor): number | null => selectedVideo
+    ? findSynchronizedPerspectiveTime(matchVideos, selectedVideo, video, playback.currentTime)
+    : null
+  const availablePerspectiveTargets = selectedPerspectiveVideos.flatMap((video) => {
+    if (video.playbackMode === 'online') return []
+    const targetSeconds = getPerspectiveTarget(video)
+    return targetSeconds === null ? [] : [{ video, targetSeconds }]
+  })
+  const activatePerspective = (video: VideoFileDescriptor, targetSeconds: number): void => {
+    if (!selectedVideo || !onMatchVideoSeek) return
+    setPerspectivePaths((paths) => [
+      ...paths.filter((path) => path !== video.path && path !== selectedVideo.path),
+      selectedVideo.path
+    ])
+    onMatchVideoSeek(video, targetSeconds)
+  }
+  const perspectiveStackClasses = [
+    'perspective-preview-stack',
+    filterOverlayVisible || (isFullscreen && activeFullscreenFlyout === 'right')
+      ? 'perspective-preview-stack--left'
+      : 'perspective-preview-stack--right',
+    isFullscreen && activeFullscreenFlyout === 'top'
+      ? 'perspective-preview-stack--bottom'
+      : 'perspective-preview-stack--top'
+  ].join(' ')
   const isMatchJumpMode = jumpTimeMode === 'match-per-part' || jumpTimeMode === 'match-cumulative'
   const canUseTimeJump = Boolean(selectedVideo) && (!isMatchJumpMode || hasMatchClock)
-  const jumpTimeModeLabel: Record<PlayerJumpTimeMode, string> = {
-    'video-per-file': 'Videozeit je Video',
-    'video-cumulative': 'Videozeit fortlaufend',
-    'match-per-part': 'Spielzeit je Teil',
-    'match-cumulative': 'Spielzeit fortlaufend'
-  }
+  const jumpTimeModeOption = getPlayerJumpTimeModeOption(jumpTimeMode)
   const currentJumpTime = (() => {
     if (!selectedVideo) return null
     return videoTimeToPlayerInput(jumpTimeMode, matchVideos, selectedVideo, playback.currentTime)
@@ -600,34 +853,34 @@ export function VideoWorkspace({
   const segmentsAfterCurrent = orientationSegmentIndex >= 0
     ? Math.max(0, segments.length - orientationSegmentIndex - 1)
     : segments.length
-  const handleMatchTimeSeek = (event: React.FormEvent): void => {
+  const handleTimeJump = (event: React.FormEvent): void => {
     event.preventDefault()
     if (!selectedVideo || !canUseTimeJump) return
-    const matchSeconds = parseTimeInput(matchTimeInput)
-    if (matchSeconds === null) {
-      setMatchTimeError('Bitte eine Spielzeit wie 45:12 eingeben.')
+    const inputSeconds = parsePlayerJumpTimeInput(jumpTimeInput)
+    if (inputSeconds === null) {
+      setJumpTimeError('Bitte eine Zeit wie 45:12 eingeben.')
       return
     }
-    const crossVideoTarget = resolvePlayerJumpTarget(jumpTimeMode, matchVideos, selectedVideo, matchSeconds)
+    const crossVideoTarget = resolvePlayerJumpTarget(jumpTimeMode, matchVideos, selectedVideo, inputSeconds)
     if (!crossVideoTarget) {
-      setMatchTimeError('Für diese Zeit wurde kein passendes Video gefunden.')
+      setJumpTimeError('Für diese Zeit wurde kein passendes Video gefunden.')
       return
     }
     if (crossVideoTarget && crossVideoTarget.video.path !== selectedVideo.path) {
       if (!onMatchVideoSeek) {
-        setMatchTimeError('Das passende Teilvideo kann nicht geöffnet werden.')
+        setJumpTimeError('Das passende Teilvideo kann nicht geöffnet werden.')
         return
       }
-      setMatchTimeError(null)
+      setJumpTimeError(null)
       onMatchVideoSeek(crossVideoTarget.video, crossVideoTarget.videoSeconds)
       return
     }
     const videoSeconds = crossVideoTarget.videoSeconds
     if (videoSeconds < 0 || (playback.duration > 0 && videoSeconds > playback.duration)) {
-      setMatchTimeError('Diese Spielzeit liegt außerhalb des Videos.')
+      setJumpTimeError('Diese Zeit liegt außerhalb des Videos.')
       return
     }
-    setMatchTimeError(null)
+    setJumpTimeError(null)
     handleTimelineSeek(videoSeconds)
   }
 
@@ -669,10 +922,10 @@ export function VideoWorkspace({
       >
         {playback.isSegmentMode ? 'Segmentmodus beenden' : 'Nur Segmente abspielen'}
       </button>
-      <button className="button" type="button" onClick={playback.jumpToPreviousSegment} disabled={segments.length === 0} title="Zum Segmentanfang; erneut drücken für das vorige Segment (←)">
+      <button className="button" type="button" onClick={playback.jumpToPreviousSegment} disabled={segments.length === 0} title={`Zum Segmentanfang; erneut drücken für das vorige Segment${playback.isSegmentMode ? ' (←)' : ''}`}>
         Voriges Segment
       </button>
-      <button className="button" type="button" onClick={playback.jumpToNextSegment} disabled={segments.length === 0} title="Nächstes Segment (→)">
+      <button className="button" type="button" onClick={playback.jumpToNextSegment} disabled={segments.length === 0} title={`Nächstes Segment${playback.isSegmentMode ? ' (→)' : ''}`}>
         Nächstes Segment
       </button>
       <button
@@ -735,6 +988,48 @@ export function VideoWorkspace({
     </div>
   )
 
+  const perspectivePicker = (
+    <div
+      className="perspective-picker"
+      ref={perspectivePickerRef}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          setPerspectivePickerOpen(false)
+          event.currentTarget.querySelector<HTMLButtonElement>('.perspective-picker__trigger')?.focus()
+        }
+      }}
+    >
+      <button
+        aria-controls="perspective-picker-panel"
+        aria-expanded={perspectivePickerOpen}
+        className={`button button--subtle player-utility-action perspective-picker__trigger${perspectivesVisible ? ' button--active' : ''}`}
+        type="button"
+        onClick={() => setPerspectivePickerOpen((open) => !open)}
+      >
+        Perspektiven
+      </button>
+      {perspectivePickerOpen ? <div className="perspective-picker__panel" id="perspective-picker-panel">
+        <label className="toggle-row">
+          <input type="checkbox" checked={perspectivesVisible} onChange={(event) => setPerspectivesVisible(event.target.checked)} />
+          <span>Zusatzperspektiven anzeigen</span>
+        </label>
+        <p>Du bestimmst selbst, welche Videos zusätzlich sichtbar sind.</p>
+        {perspectiveOptions.length > 0 ? perspectiveOptions.map((video) => (
+          <label className="perspective-picker__video" key={video.path} title={video.path}>
+            <input
+              type="checkbox"
+              checked={perspectivePaths.includes(video.path)}
+              onChange={(event) => setPerspectivePaths((paths) => event.target.checked
+                ? [...paths.filter((path) => path !== video.path), video.path]
+                : paths.filter((path) => path !== video.path))}
+            />
+            <span>{video.fileName}</span>
+          </label>
+        )) : <p>Keine weiteren Videos dieses Spiels geladen.</p>}
+      </div> : null}
+    </div>
+  )
+
   const utilityControls = (
     <div className="controls-row player-controls__utility">
       <div className="volume-control" title={playback.segmentMuted ? 'Ton im CSV für dieses Segment deaktiviert' : undefined}>
@@ -765,7 +1060,7 @@ export function VideoWorkspace({
         />
       </div>
       <button
-        className={`button button--subtle${filterOverlayVisible ? ' button--active' : ''}`}
+        className={`button button--subtle player-utility-action${filterOverlayVisible ? ' button--active' : ''}`}
         type="button"
         onClick={onToggleFilterOverlay}
         disabled={!selectedVideo}
@@ -773,8 +1068,9 @@ export function VideoWorkspace({
       >
         Filter
       </button>
+      {perspectivePicker}
       <button
-        className="button button--subtle"
+        className="button button--subtle player-utility-action"
         type="button"
         onClick={() => void toggleFullscreen()}
         disabled={!selectedVideo}
@@ -792,12 +1088,13 @@ export function VideoWorkspace({
         <summary className="player-assist-pill shortcut-list__toggle">Tastenkürzel</summary>
         <div className="shortcut-list__grid">
           <kbd>Leertaste</kbd><span>Play / Pause</span>
-          <kbd>←</kbd><span>Segmentanfang; zweimal: voriges Segment</span>
-          <kbd>→</kbd><span>Nächstes Segment</span>
+          <kbd>←</kbd><span>{playback.isSegmentMode ? 'Segmentanfang; zweimal: voriges Segment' : 'Ein Bild zurück'}</span>
+          <kbd>→</kbd><span>{playback.isSegmentMode ? 'Nächstes Segment' : 'Ein Bild vor'}</span>
+          <kbd>Strg+← →</kbd><span>Vorheriges / nächstes Video</span>
           <kbd>Shift+← →</kbd><span>{SEEK_STEP_SECONDS} Sekunden zurück / vor</span>
           <kbd>, .</kbd><span>Ein Bild zurück / vor</span>
           <kbd>&lt; &gt;</kbd><span>Langsamer / Schneller</span>
-          <kbd>A</kbd><span>Zum Anstoß springen</span>
+          <kbd>A</kbd><span>Zum Beginn der Zeitzuordnung</span>
           <kbd>N</kbd><span>Nur Segmente abspielen ein-/ausschalten</span>
           <kbd>F</kbd><span>Filter ein-/ausblenden</span>
           <kbd>R</kbd><span>Einzelwiederholung umschalten</span>
@@ -854,13 +1151,13 @@ export function VideoWorkspace({
       className="button button--subtle fullscreen-kickoff-button"
       type="button"
       disabled={!selectedVideo}
-      aria-label="Zum Anstoß springen"
-      title={selectedVideo?.kickoffVideoSeconds === undefined || selectedVideo.matchHalf === undefined
-        ? 'Zum Anstoß springen (A) – Anstoß nicht festgelegt'
-        : 'Zum Anstoß springen (A)'}
+      aria-label="Zum Beginn der Zeitzuordnung springen"
+      title={!selectedMatchRange
+        ? 'Zum Beginn der Zeitzuordnung springen (A) – nicht festgelegt'
+        : 'Zum Beginn der Zeitzuordnung springen (A)'}
       onClick={jumpToKickoff}
     >
-      <span>Anstoß</span>
+      <span>Zeitstart</span>
       <kbd aria-hidden="true">A</kbd>
     </button>
   )
@@ -877,12 +1174,12 @@ export function VideoWorkspace({
         <span className="time-row__total">{formatClockTime(playback.duration)}</span>
       </div>
       {canUseTimeJump && (
-        <form className="match-time-jump" onSubmit={handleMatchTimeSeek}>
+        <form className="match-time-jump" onSubmit={handleTimeJump}>
           <span className="match-time-jump__current">{isMatchJumpMode ? 'Spielzeit' : 'Videozeit'}: {currentJumpTime !== null && currentJumpTime >= 0 ? formatClockTime(currentJumpTime) : 'vor Beginn'}</span>
-          <label htmlFor="match-time-input">Springe zu Zeit <small>({jumpTimeModeLabel[jumpTimeMode]})</small></label>
-          <input id="match-time-input" value={matchTimeInput} onChange={(event) => setMatchTimeInput(event.target.value)} placeholder={jumpTimeMode === 'match-cumulative' && selectedVideo?.matchHalf === 2 ? `z. B. ${formatClockTime(getHalfStartSeconds(2, selectedVideo.matchDurationSeconds) + 12)}` : 'z. B. 09:00'} />
+          <label htmlFor="match-time-input">Springe zu Zeit <small>({jumpTimeModeOption.title})</small></label>
+          <input id="match-time-input" value={jumpTimeInput} onChange={(event) => setJumpTimeInput(event.target.value)} placeholder={jumpTimeMode === 'match-cumulative' && selectedMatchRange ? `z. B. ${formatClockTime(selectedMatchRange.matchStartSeconds + 12)}` : 'z. B. 09:00'} />
           <button className="button button--subtle" type="submit" title="Zur eingegebenen Spielzeit springen (Enter)">Springen</button>
-          {matchTimeError && <span className="match-time-jump__error" role="alert">{matchTimeError}</span>}
+          {jumpTimeError && <span className="match-time-jump__error" role="alert">{jumpTimeError}</span>}
         </form>
       )}
     </div>
@@ -957,12 +1254,34 @@ export function VideoWorkspace({
         <span>Zeiten und Segment anzeigen</span>
         <kbd>T</kbd>
       </label>
+      <div className="fullscreen-info__time-mode">
+        <label htmlFor="fullscreen-time-mode">
+          <span>Zeitbezug für Segmente und Sprungziele</span>
+          <select
+            id="fullscreen-time-mode"
+            value={jumpTimeMode}
+            onChange={(event) => {
+              const mode = event.target.value as PlayerJumpTimeMode
+              onJumpTimeModeChange?.(mode)
+              showKeyboardHud('⌚', 'Zeitbezug geändert', getPlayerJumpTimeModeOption(mode).title)
+            }}
+            disabled={!onJumpTimeModeChange}
+          >
+            {PLAYER_JUMP_TIME_MODE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.title}</option>
+            ))}
+          </select>
+        </label>
+        <p>Gespeicherte Segmentzeiten und Eingaben bei „Springe zu Zeit“: {jumpTimeModeOption.description}</p>
+      </div>
       {assistRow}
       {playbackHint}
     </div>
   )
 
-  const fullscreenPlaybackBanner = isFullscreen && errorBanner ? (
+  const fullscreenSplashVisible = isFullscreen && Boolean(selectedVideo) && !fullscreenStarted
+
+  const fullscreenPlaybackBanner = isFullscreen && !fullscreenSplashVisible && errorBanner ? (
     <div className="fullscreen-playback-banner" data-testid="fullscreen-playback-banner" role="alert">
       {errorBanner}
     </div>
@@ -1061,7 +1380,7 @@ export function VideoWorkspace({
     </button>
   ) : null
 
-  const fullscreenFlyouts = isFullscreen ? (
+  const fullscreenFlyouts = isFullscreen && !fullscreenSplashVisible ? (
     <div className="fullscreen-flyouts" data-testid="fullscreen-flyout-shell">
       <button aria-controls="fullscreen-flyout-top" aria-expanded={activeFullscreenFlyout === 'top'} aria-pressed={pinnedFullscreenFlyout === 'top'} aria-label={pinnedFullscreenFlyout === 'top' ? 'Info angeheftet; klicken zum Lösen' : 'Info einblenden'} className={`fullscreen-edge-trigger fullscreen-edge-trigger--top${pinnedFullscreenFlyout === 'top' ? ' fullscreen-edge-trigger--pinned' : ''}`} type="button" onMouseEnter={() => handleFullscreenFlyoutMouseEnter('top')} onMouseLeave={() => handleFullscreenFlyoutMouseLeave('top')} onFocus={() => handleFullscreenFlyoutMouseEnter('top')} onBlur={() => handleFullscreenFlyoutMouseLeave('top')} onClick={() => toggleFullscreenFlyout('top')}><span>Info</span>{pinnedFullscreenFlyout === 'top' ? <FlyoutPinIndicator /> : null}</button>
       <div aria-hidden={activeFullscreenFlyout !== 'top'} className={`fullscreen-flyout-panel fullscreen-flyout-panel--top ${activeFullscreenFlyout === 'top' ? 'fullscreen-flyout-panel--open' : ''}`} id="fullscreen-flyout-top" inert={activeFullscreenFlyout !== 'top'} onMouseEnter={() => handleFullscreenFlyoutMouseEnter('top')} onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) handleFullscreenFlyoutMouseLeave('top') }} onFocus={() => handleFullscreenFlyoutMouseEnter('top')} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) handleFullscreenFlyoutMouseLeave('top') }}>
@@ -1095,7 +1414,7 @@ export function VideoWorkspace({
             <span className="fullscreen-exit-label">Vollbild beenden <kbd>F11</kbd></span>
           </div>
           {zoomControlsPanel}
-          {repeatToggle}
+          {perspectivePicker}
           <div className="fullscreen-filter-slot">
             {isValidElement<{ visible: boolean }>(children) && typeof children.type !== 'string'
               ? cloneElement(children, { visible: true })
@@ -1190,7 +1509,7 @@ export function VideoWorkspace({
                   </div>
                 </div>
 
-                <div className={`video-splash${(!isFullscreen || fullscreenStarted) ? ' video-splash--hidden' : ''}`} aria-hidden={!isFullscreen || fullscreenStarted}>
+                <div className={`video-splash${!fullscreenSplashVisible ? ' video-splash--hidden' : ''}`} aria-hidden={!fullscreenSplashVisible}>
                   <img src={appLogo} className="video-splash__logo" alt="" aria-hidden="true" />
                   <div className="video-splash__brand">
                     <div className="brand-mark__word" aria-label="Kaderblick">
@@ -1209,7 +1528,7 @@ export function VideoWorkspace({
                     aria-multiline="true"
                     aria-label="Sitzungsname"
                     data-placeholder="Sitzungsname (z.B. Videoanalyse 24.04.2026)"
-                    tabIndex={(!isFullscreen || fullscreenStarted) ? -1 : 0}
+                    tabIndex={fullscreenSplashVisible ? 0 : -1}
                     onInput={(e) => {
                       const text = e.currentTarget.innerText
                       titleInternalRef.current = text
@@ -1222,11 +1541,11 @@ export function VideoWorkspace({
                       }
                     }}
                   />
-                  <p className="video-splash__hint">Leertaste oder Play zum Starten</p>
+                  <p className="video-splash__hint">Leertaste zum Starten</p>
                 </div>
 
                 {/* Interstitial is suppressed while the splash is visible in fullscreen */}
-                {playback.interstitialSegment && (!isFullscreen || fullscreenStarted) ? (
+                {playback.interstitialSegment && !fullscreenSplashVisible ? (
                   <div
                     className="segment-interstitial"
                     aria-live="polite"
@@ -1250,7 +1569,7 @@ export function VideoWorkspace({
                     ) : null}
                   </div>
                 ) : null}
-                {isFullscreen && keyboardHud ? (
+                {isFullscreen && !fullscreenSplashVisible && keyboardHud ? (
                   <div key={keyboardHud.id} className="fullscreen-keyboard-hud" data-testid="fullscreen-keyboard-hud" aria-live="polite">
                     <span className="fullscreen-keyboard-hud__icon" aria-hidden="true">{keyboardHud.icon}</span>
                     <span className="fullscreen-keyboard-hud__copy">
@@ -1260,8 +1579,22 @@ export function VideoWorkspace({
                   </div>
                 ) : null}
                 {fullscreenOrientation}
+                {perspectivesVisible && !fullscreenSplashVisible && availablePerspectiveTargets.length > 0 && !playback.interstitialSegment ? (
+                  <div className={perspectiveStackClasses} aria-label="Aktuell verfügbare Zusatzperspektiven">
+                    {availablePerspectiveTargets.map(({ video, targetSeconds }) => (
+                      <PerspectivePreview
+                        key={video.path}
+                        video={video}
+                        targetSeconds={targetSeconds}
+                        isPlaying={playback.isPlaying}
+                        playbackRate={playback.playbackRate}
+                        onActivate={() => activatePerspective(video, targetSeconds)}
+                      />
+                    ))}
+                  </div>
+                ) : null}
                 {fullscreenPlaybackBanner}
-                {screenshotStatus ? (
+                {screenshotStatus && !fullscreenSplashVisible ? (
                   <div className={`screenshot-status screenshot-status--${screenshotStatus.kind}`} role="status" aria-live="polite">
                     {screenshotStatus.message}
                   </div>
@@ -1305,7 +1638,7 @@ export function VideoWorkspace({
         ) : (
           <>
             {fullscreenFlyouts}
-            {overlayDialogs}
+            {!fullscreenSplashVisible ? overlayDialogs : null}
           </>
         )}
       </section>

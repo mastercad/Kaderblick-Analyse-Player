@@ -54,3 +54,76 @@ jobs:
 
       - name: Tests ausführen
         run: npm test
+
+  electron_e2e:
+    name: Electron E2E und visuelle Regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v7
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Virtuelle Anzeige installieren
+        run: sudo apt-get update && sudo apt-get install --yes xvfb
+
+      - name: Electron E2E ausführen
+        run: xvfb-run --auto-servernum npm run test:e2e
+
+      - name: Playwright-Artefakte sichern
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: electron-e2e-${{ github.run_id }}
+          path: |
+            test-results/e2e
+            playwright-report
+          if-no-files-found: ignore
+          retention-days: 14
+
+  electron_cross_platform:
+    name: Electron E2E (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v7
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Electron-Workflows ausführen
+        run: npm run test:e2e:workflow
+
+      - name: Playwright-Artefakte sichern
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: electron-e2e-${{ matrix.os }}-${{ github.run_id }}
+          path: |
+            test-results/e2e
+            playwright-report
+          if-no-files-found: ignore
+          retention-days: 14

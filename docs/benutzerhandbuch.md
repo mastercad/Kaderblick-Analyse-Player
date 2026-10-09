@@ -111,7 +111,44 @@ Unter `Einstellungen` im Menü oben rechts legt ihr fest, wie eine im Player ein
 - `Spielzeit – je Halbzeit/Teil`: die Zeit beginnt je Halbzeit oder Teil wieder bei null
 - `Spielzeit – fortlaufend`: die Spieluhr läuft über alle Halbzeiten oder Teile weiter
 
+Im Vollbild findet ihr denselben Zeitbezug unter `Info`. Dort seht ihr jederzeit, wie gespeicherte Segmentzeiten und Eingaben bei `Springe zu Zeit` interpretiert werden, und könnt die gemeinsame Einstellung direkt ändern.
+
 Segmentzeiten werden im Editor und in der CSV unverändert gespeichert. Der gewählte Modus bestimmt erst bei der Wiedergabe, wie Sprung- und Segmentzeiten auf die Position im zugeordneten Video abgebildet werden.
+
+### Videoausschnitte einer Spielzeit zuordnen
+
+Im Segment-Editor öffnet ihr unter `Spielzeit im Video festlegen` das gewünschte Video. Das aktive Video ist bereits aufgeklappt. Für jeden Spielabschnitt werden nur drei Angaben benötigt:
+
+- `Anstoß/Wiederbeginn im Video`: die Stelle in der Aufnahme, an der dieser Spielabschnitt beginnt
+- `Spieluhr startet bei`: der Stand der Spieluhr an dieser Stelle
+- `Dauer des Spielabschnitts`: wie lange in diesem Abschnitt gespielt wird
+
+Für eine normale erste Halbzeit spult ihr zum Anstoß, klickt auf `Aktuelle Videoposition einsetzen` und lasst `Spieluhr startet bei 00:00` sowie `Dauer 45:00` stehen. Beginnt der Anstoß im Video beispielsweise bei `03:10`, zeigt der Editor als Ergebnis: Im Video `03:10–48:10` läuft die Spieluhr von `00:00–45:00`.
+
+Die Vorlagen `1. Halbzeit` und `2. Halbzeit` setzen Start und Dauer der Spieluhr passend voraus. Die Position des Anstoßes beziehungsweise Wiederbeginns im Video bestimmt ihr weiterhin selbst.
+
+Unberührte Videos erhalten keine automatische Spielzeit-Zuordnung. Eine vorhandene falsche Zuordnung könnt ihr mit `Spielzeit-Zuordnung entfernen` vollständig löschen. Unfertige Zeitangaben eines Videos verhindern nicht, dass gültige Änderungen an einem anderen Video gespeichert werden.
+
+Enthält eine Aufnahme beide Halbzeiten, legt ihr zwei Spielabschnitte an. Beispiel:
+
+- `Video 02:10 bis 47:10` entspricht `Spielzeit 00:00 bis 45:00`
+- `Video 58:30 bis 103:30` entspricht `Spielzeit 45:00 bis 90:00`
+
+Die Halbzeitpause zwischen `47:10` und `58:30` bleibt dadurch bewusst ohne Spielzeit. Das funktioniert genauso für Aufnahmeunterbrechungen und geschnittene Videos: Nach jeder Lücke beginnt ein neuer Spielabschnitt.
+
+Gebt Videos desselben Spiels im Feld `Spiel` denselben Namen. Falls mehrere Videos dieselbe Spielzeit zeigen, bleibt der Player nach Möglichkeit im aktuellen Video; andernfalls verwendet er das erste passende Video aus der Videoliste. Zeiten in Lücken zwischen den Ausschnitten werden nicht angesprungen.
+
+### Zusatzperspektiven manuell auswählen
+
+Unter `Perspektiven` bestimmt ihr selbst, welche weiteren Videos klein über dem Hauptvideo angezeigt werden. Der Player wählt niemals selbst eine Kamera aus. Erst wenn ihr `Zusatzperspektiven anzeigen` aktiviert und bei einem Video ein Häkchen setzt, wird dieses Video eingeblendet.
+
+Die Vorschau benutzt die oben eingetragenen Spielabschnitte, um dieselbe Spielzeit zu zeigen. Angezeigt werden ausschließlich ausgewählte Zusatzvideos, die an der aktuellen Spielzeit tatsächlich ein Bild besitzen. Die Auswahl bleibt auch außerhalb ihres verfügbaren Zeitbereichs erhalten und erscheint automatisch wieder, sobald sie die aktuelle Spielzeit abdeckt.
+
+Auch Aufnahmen vor dem Anstoß, in der Halbzeitpause und nach Spielende werden synchronisiert. Dafür verwendet der Player den zeitlichen Abstand zur nächstgelegenen festgelegten Spielzeit-Grenze: beispielsweise „zwei Minuten vor Anstoß“. Eine Kamera erscheint nur, wenn sie an der berechneten Stelle tatsächlich schon beziehungsweise noch aufgenommen hat.
+
+Klickt auf eine Zusatzperspektive, um sie bewusst zur Hauptansicht zu machen. Die bisherige Hauptansicht wechselt dabei an dieselbe Spielzeit in die Vorschau. Der Player wählt weiterhin niemals selbstständig eine Kamera aus. Geöffnete Werkzeug-, Informations- und Steuerungsleisten verdrängen die Vorschauen in den jeweils freien Bildschirmbereich. Die Zusatzperspektiven sind stumm und können jederzeit vollständig ausgeblendet werden.
+
+Wenn ein Rechner bei einer Zusatzperspektive wiederholt Bilder verwirft, reduziert der Player automatisch nur diese Vorschau. Flüssig laufende Ansichten und das Hauptvideo bleiben in ihrer ursprünglichen Qualität.
 
 ## Über die App
 
@@ -122,8 +159,9 @@ Im Bereich `Über die App` seht ihr die wichtigsten Informationen zur Anwendung,
 - `Leertaste`: Wiedergabe oder Pause
 - `N`: Nur Segmente abspielen starten
 - `R`: Wiederholung des aktuell aktiven Segments ein- oder ausschalten
-- `Pfeil links`: Voriges Segment
-- `Pfeil rechts`: Nachstes Segment
+- `Pfeil links/rechts` bei aktivem Segmentmodus: voriges beziehungsweise nächstes Segment
+- `Pfeil links/rechts` bei ausgeschaltetem Segmentmodus: ein Bild zurück beziehungsweise vor
+- `Strg + Pfeil links/rechts`: zum vorherigen beziehungsweise nächsten geladenen Video wechseln
 - `F`: Filterbereich einblenden oder ausblenden
 - `F11`: Vollbild ein- oder ausschalten
 

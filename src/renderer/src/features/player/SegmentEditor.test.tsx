@@ -68,7 +68,7 @@ describe('SegmentEditor', () => {
   })
 
   describe('video match settings', () => {
-    it('labels each video row with Spielstart and Länge without a per-video suffix', () => {
+    it('shows compact time-range fields and keeps the explanation collapsed', () => {
       render(
         <SegmentEditor
           videos={oneVideo}
@@ -79,12 +79,18 @@ describe('SegmentEditor', () => {
         />
       )
 
-      expect(screen.getByRole('textbox', { name: 'Spielstart für vid1.mp4' })).toBeInTheDocument()
-      expect(screen.getByRole('textbox', { name: 'Länge für vid1.mp4' })).toBeInTheDocument()
-      expect(screen.queryByText(/pro Video/i)).not.toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: 'Anstoß oder Wiederbeginn im Video für Spielabschnitt 1 von vid1.mp4' })).toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: 'Spieluhr startet bei für Spielabschnitt 1 von vid1.mp4' })).toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: 'Dauer des Spielabschnitts 1 von vid1.mp4' })).toBeInTheDocument()
+      expect(screen.getByText('Kurze Anleitung').closest('details')).not.toHaveAttribute('open')
+      const openVideoSettings = screen.getByRole('textbox', { name: 'Anstoß oder Wiederbeginn im Video für Spielabschnitt 1 von vid1.mp4' }).closest('details')
+      expect(openVideoSettings).toHaveAttribute('open')
+      fireEvent.click(openVideoSettings!.querySelector('summary')!)
+      expect(openVideoSettings).not.toHaveAttribute('open')
+      expect(screen.getByText('↕ Kopfzeile ziehen, um das Fenster zu verschieben')).toBeInTheDocument()
     })
 
-    it('saves half and kickoff position immediately without requiring a valid segment', () => {
+    it('saves a clip range and its corresponding video position without requiring a segment', () => {
       const onVideoSettingsChange = vi.fn()
       render(
         <SegmentEditor
@@ -97,15 +103,106 @@ describe('SegmentEditor', () => {
         />
       )
 
-      fireEvent.change(screen.getByRole('combobox', { name: 'Halbzeit für vid1.mp4' }), { target: { value: '2' } })
-      fireEvent.change(screen.getByRole('textbox', { name: 'Spielstart für vid1.mp4' }), { target: { value: '02:41' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Spieluhr startet bei für Spielabschnitt 1 von vid1.mp4' }), { target: { value: '63:40' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Dauer des Spielabschnitts 1 von vid1.mp4' }), { target: { value: '04:40' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Anstoß oder Wiederbeginn im Video für Spielabschnitt 1 von vid1.mp4' }), { target: { value: '00:12' } })
 
       expect(onVideoSettingsChange).toHaveBeenLastCalledWith([
-        expect.objectContaining({ matchHalf: 2, kickoffVideoSeconds: 161, matchDurationSeconds: 2700 })
+        expect.objectContaining({
+          matchTimeStartSeconds: 63 * 60 + 40,
+          matchTimeEndSeconds: 68 * 60 + 20,
+          videoTimeStartSeconds: 12,
+          kickoffVideoSeconds: 12,
+          matchDurationSeconds: 4 * 60 + 40
+        })
       ])
     })
 
-    it('groups the two halves of each match without sharing settings with another match', () => {
+    it('can take the current player position as the video start', () => {
+      const onVideoSettingsChange = vi.fn()
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          activeVideoPath={oneVideo[0].path}
+          initialSegments={[]}
+          getCurrentTime={() => 37}
+          onLoad={onLoad}
+          onVideoSettingsChange={onVideoSettingsChange}
+          onClose={() => {}}
+        />
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Aktuelle Videoposition einsetzen für Spielabschnitt 1 von vid1.mp4' }))
+
+      expect(screen.getByRole('textbox', { name: 'Anstoß oder Wiederbeginn im Video für Spielabschnitt 1 von vid1.mp4' })).toHaveValue('00:37')
+      expect(onVideoSettingsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({ videoTimeStartSeconds: 37 })
+      ])
+    })
+
+    it('shows the computed result for a normal 45-minute half', () => {
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          activeVideoPath={oneVideo[0].path}
+          initialSegments={[]}
+          getCurrentTime={() => 3 * 60 + 10}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Aktuelle Videoposition einsetzen für Spielabschnitt 1 von vid1.mp4' }))
+
+      expect(screen.getByText('Ergebnis: Im Video 03:10–48:10 läuft die Spieluhr von 00:00 bis 45:00.')).toBeInTheDocument()
+    })
+
+    it('fills the game-clock start for the second-half template', () => {
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: '2. Halbzeit' }))
+
+      expect(screen.getByRole('textbox', { name: 'Spieluhr startet bei für Spielabschnitt 1 von vid1.mp4' })).toHaveValue('45:00')
+      expect(screen.getByText('Ergebnis: Im Video 00:00–45:00 läuft die Spieluhr von 45:00 bis 90:00.')).toBeInTheDocument()
+    })
+
+    it('stores separate ranges before and after a video pause', () => {
+      const onVideoSettingsChange = vi.fn()
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          activeVideoPath={oneVideo[0].path}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onVideoSettingsChange={onVideoSettingsChange}
+          onClose={() => {}}
+        />
+      )
+
+      fireEvent.change(screen.getByRole('textbox', { name: 'Anstoß oder Wiederbeginn im Video für Spielabschnitt 1 von vid1.mp4' }), { target: { value: '02:10' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Weiteren Spielabschnitt hinzufügen' }))
+      fireEvent.change(screen.getByRole('textbox', { name: 'Anstoß oder Wiederbeginn im Video für Spielabschnitt 2 von vid1.mp4' }), { target: { value: '58:30' } })
+
+      expect(onVideoSettingsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({
+          matchTimeRanges: [
+            expect.objectContaining({ videoStartSeconds: 2 * 60 + 10, videoEndSeconds: 47 * 60 + 10, matchStartSeconds: 0, matchEndSeconds: 45 * 60 }),
+            expect.objectContaining({ videoStartSeconds: 58 * 60 + 30, videoEndSeconds: 103 * 60 + 30, matchStartSeconds: 45 * 60, matchEndSeconds: 90 * 60 })
+          ]
+        })
+      ])
+    })
+
+    it('keeps time ranges independent while grouping clips from different matches', () => {
       const onVideoSettingsChange = vi.fn()
       const videos = [
         makeVideo('spiel1-hz1.mp4'),
@@ -123,18 +220,136 @@ describe('SegmentEditor', () => {
         />
       )
 
+      const firstVideoSettings = screen.getByRole('textbox', { name: 'Anstoß oder Wiederbeginn im Video für Spielabschnitt 1 von spiel1-hz1.mp4' }).closest('details')!
+      fireEvent.click(within(firstVideoSettings).getByRole('button', { name: '1. Halbzeit' }))
       fireEvent.change(screen.getByRole('textbox', { name: 'Spiel für spiel1-hz1.mp4' }), { target: { value: 'Spiel 1' } })
-      fireEvent.change(screen.getByRole('textbox', { name: 'Länge für spiel1-hz1.mp4' }), { target: { value: '35:00' } })
       fireEvent.change(screen.getByRole('textbox', { name: 'Spiel für spiel1-hz2.mp4' }), { target: { value: 'Spiel 1' } })
-      fireEvent.change(screen.getByRole('combobox', { name: 'Halbzeit für spiel1-hz2.mp4' }), { target: { value: '2' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Spieluhr startet bei für Spielabschnitt 1 von spiel1-hz2.mp4' }), { target: { value: '45:00' } })
       fireEvent.change(screen.getByRole('textbox', { name: 'Spiel für spiel2-hz1.mp4' }), { target: { value: 'Spiel 2' } })
-      fireEvent.change(screen.getByRole('textbox', { name: 'Spielstart für spiel2-hz1.mp4' }), { target: { value: '12:00' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Spieluhr startet bei für Spielabschnitt 1 von spiel2-hz1.mp4' }), { target: { value: '12:00' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Dauer des Spielabschnitts 1 von spiel2-hz1.mp4' }), { target: { value: '06:00' } })
 
       expect(onVideoSettingsChange).toHaveBeenLastCalledWith([
-        expect.objectContaining({ matchGroupId: 'Spiel 1', matchHalf: 1, matchDurationSeconds: 35 * 60 }),
-        expect.objectContaining({ matchGroupId: 'Spiel 1', matchHalf: 2, matchDurationSeconds: 35 * 60 }),
-        expect.objectContaining({ matchGroupId: 'Spiel 2', matchHalf: 1, kickoffVideoSeconds: 12 * 60, matchDurationSeconds: 45 * 60 })
+        expect.objectContaining({ matchGroupId: 'Spiel 1', matchTimeStartSeconds: 0, matchTimeEndSeconds: 45 * 60 }),
+        expect.objectContaining({ matchGroupId: 'Spiel 1', matchTimeStartSeconds: 45 * 60, matchTimeEndSeconds: 90 * 60 }),
+        expect.objectContaining({ matchGroupId: 'Spiel 2', matchTimeStartSeconds: 12 * 60, matchTimeEndSeconds: 18 * 60 })
       ])
+    })
+
+    it('does not assign a default first half to untouched videos', () => {
+      const onVideoSettingsChange = vi.fn()
+      render(
+        <SegmentEditor
+          videos={twoVideos}
+          activeVideoPath={vid1.path}
+          initialSegments={[]}
+          getCurrentTime={() => 4 * 60 + 14}
+          onLoad={onLoad}
+          onVideoSettingsChange={onVideoSettingsChange}
+          onClose={() => {}}
+        />
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Aktuelle Videoposition einsetzen für Spielabschnitt 1 von vid1.mp4' }))
+
+      const updatedVideos = onVideoSettingsChange.mock.lastCall![0] as VideoFileDescriptor[]
+      expect(updatedVideos[0]).toEqual(expect.objectContaining({
+        matchTimeStartSeconds: 0,
+        matchTimeEndSeconds: 45 * 60,
+        videoTimeStartSeconds: 4 * 60 + 14
+      }))
+      expect(updatedVideos[1]).toEqual(vid2)
+      expect(updatedVideos[1]).not.toHaveProperty('matchTimeRanges')
+    })
+
+    it('saves a valid video even while another video has an invalid unfinished value', () => {
+      const onVideoSettingsChange = vi.fn()
+      const configuredVideos = twoVideos.map((video) => ({
+        ...video,
+        matchTimeRanges: [{
+          id: video.path,
+          matchStartSeconds: 0,
+          matchEndSeconds: 45 * 60,
+          videoStartSeconds: 60,
+          videoEndSeconds: 46 * 60
+        }]
+      }))
+      render(
+        <SegmentEditor
+          videos={configuredVideos}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onVideoSettingsChange={onVideoSettingsChange}
+          onClose={() => {}}
+        />
+      )
+
+      fireEvent.change(screen.getByRole('textbox', { name: 'Dauer des Spielabschnitts 1 von vid1.mp4' }), { target: { value: '' } })
+      fireEvent.click(screen.getAllByRole('button', { name: '2. Halbzeit' })[1])
+
+      const updatedVideos = onVideoSettingsChange.mock.lastCall![0] as VideoFileDescriptor[]
+      expect(updatedVideos[0].matchTimeRanges).toEqual(configuredVideos[0].matchTimeRanges)
+      expect(updatedVideos[1].matchTimeRanges).toEqual([
+        expect.objectContaining({ matchStartSeconds: 45 * 60, matchEndSeconds: 90 * 60 })
+      ])
+    })
+
+    it('can remove an incorrectly assigned time mapping completely', () => {
+      const onVideoSettingsChange = vi.fn()
+      const configuredVideo: VideoFileDescriptor = {
+        ...vid1,
+        matchHalf: 1,
+        kickoffVideoSeconds: 0,
+        matchDurationSeconds: 45 * 60,
+        matchTimeStartSeconds: 0,
+        matchTimeEndSeconds: 45 * 60,
+        videoTimeStartSeconds: 0,
+        matchTimeRanges: [{ id: 'first', matchStartSeconds: 0, matchEndSeconds: 45 * 60, videoStartSeconds: 0, videoEndSeconds: 45 * 60 }]
+      }
+      render(
+        <SegmentEditor
+          videos={[configuredVideo]}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onVideoSettingsChange={onVideoSettingsChange}
+          onClose={() => {}}
+        />
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Spielzeit-Zuordnung entfernen' }))
+
+      const updatedVideo = (onVideoSettingsChange.mock.lastCall![0] as VideoFileDescriptor[])[0]
+      expect(updatedVideo).not.toHaveProperty('matchTimeRanges')
+      expect(updatedVideo).not.toHaveProperty('matchTimeStartSeconds')
+      expect(updatedVideo).not.toHaveProperty('matchHalf')
+      expect(screen.getByText('Noch nicht eingerichtet')).toBeInTheDocument()
+    })
+  })
+
+  describe('window movement', () => {
+    it('moves the editor by dragging its header', () => {
+      render(
+        <SegmentEditor
+          videos={oneVideo}
+          initialSegments={[]}
+          getCurrentTime={() => 0}
+          onLoad={onLoad}
+          onClose={() => {}}
+        />
+      )
+
+      const dialog = screen.getByRole('dialog').querySelector('.segment-editor') as HTMLDivElement
+      const header = dialog.querySelector('.segment-editor__header') as HTMLDivElement
+      header.setPointerCapture = vi.fn()
+      header.releasePointerCapture = vi.fn()
+
+      fireEvent.pointerDown(header, { pointerId: 1, button: 0, clientX: 100, clientY: 100 })
+      fireEvent.pointerMove(header, { pointerId: 1, clientX: 160, clientY: 50 })
+      fireEvent.pointerUp(header, { pointerId: 1, clientX: 160, clientY: 50 })
+
+      expect(dialog).toHaveStyle({ transform: 'translate(60px, -50px)' })
     })
   })
 
@@ -697,7 +912,7 @@ describe('SegmentEditor', () => {
       expect(csv).not.toContain('/v/first.mp4')
     })
 
-    it('does not rewrite segment input fields when video kickoff settings change', () => {
+    it('does not rewrite segment input fields when the video time mapping changes', () => {
       render(
         <SegmentEditor
           videos={[{ ...vid1, matchHalf: 1, kickoffVideoSeconds: 60, matchDurationSeconds: 45 * 60 }]}
@@ -712,7 +927,7 @@ describe('SegmentEditor', () => {
         />
       )
 
-      fireEvent.change(screen.getByRole('textbox', { name: 'Spielstart für vid1.mp4' }), { target: { value: '02:00' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Anstoß oder Wiederbeginn im Video für Spielabschnitt 1 von vid1.mp4' }), { target: { value: '02:00' } })
 
       expect(screen.getByDisplayValue('10:00')).toBeInTheDocument()
       expect(screen.getByDisplayValue('11:00')).toBeInTheDocument()

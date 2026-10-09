@@ -8,3 +8,9 @@ export const buildStreamUrl = (filePath: string, startSeconds = 0): string => {
   }
   return url.toString()
 }
+
+export const buildPreviewStreamUrl = (filePath: string, startSeconds = 0): string => {
+  const url = new URL(buildStreamUrl(filePath, startSeconds))
+  url.searchParams.set('preview', '1')
+  return url.toString()
+}
