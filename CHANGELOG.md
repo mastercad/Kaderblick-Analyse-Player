@@ -1,3 +1,9 @@
+## [2.11.1](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.11.0...v2.11.1) (2026-10-09)
+
+### Bug Fixes
+
+* fix(updater): add explicit in-app update flow ([4b920d0](https://github.com/mastercad/Kaderblick-Analyse-Player/commit/4b920d04f9a3db960b4e536a808c12f536045ea1))
+
 ## [2.11.0](https://github.com/mastercad/Kaderblick-Analyse-Player/compare/v2.10.0...v2.11.0) (2026-10-09)
 
 ### Features
